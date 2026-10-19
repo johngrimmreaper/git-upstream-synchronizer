@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+import fcntl
+import os
 import subprocess
 from typing import Literal
 
@@ -27,6 +29,7 @@ def _git(repo: Path, *args: str, allowed_exit_codes: tuple[int, ...] = (0,)) -> 
         result = subprocess.run(
             ["git", "-C", str(repo), *args],
             text=True, capture_output=True, check=False, timeout=30,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GitCommandError(f"Unable to run Git operation: {args[0]}") from error
@@ -44,13 +47,43 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
     upstream remote. Divergent histories are reported, never merged or overwritten.
     This intentionally does not push the result to a hosting service.
     """
-    path = Path(repo).resolve(strict=True)
+    try:
+        path = Path(repo).resolve(strict=True)
+    except OSError as error:
+        raise SyncError("Repository path is unavailable") from error
     if not path.is_dir():
         raise SyncError("Repository path is not a directory")
-    current_branch = _git(path, "symbolic-ref", "--quiet", "--short", "HEAD").stdout.strip()
+    if not branch or branch.startswith("-") or _git(
+        path, "check-ref-format", f"refs/heads/{branch}", allowed_exit_codes=(0, 1),
+    ).returncode:
+        raise SyncError("Invalid branch name")
+    if not upstream or upstream.startswith("-") or upstream not in _git(path, "remote").stdout.splitlines():
+        raise SyncError("Upstream must name a configured remote")
+
+    # One Linux advisory lock covers CLI/worker calls, including linked worktrees.
+    common_dir = Path(_git(path, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
+    try:
+        with (common_dir / "upstream-synchronizer.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise GitCommandError("Another synchronization is running") from error
+            return _synchronize_locked(path, branch, upstream)
+    except OSError as error:
+        raise GitCommandError("Unable to lock repository") from error
+
+
+def _synchronize_locked(path: Path, branch: str, upstream: str) -> SyncResult:
+    current_branch = _git(
+        path, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_exit_codes=(0, 1),
+    ).stdout.strip()
     if current_branch != branch:
         raise SyncError(f"Expected checked-out branch {branch!r}, found {current_branch!r}")
-    if _git(path, "status", "--porcelain").stdout.strip():
+    for marker in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply", "sequencer"):
+        marker_path = _git(path, "rev-parse", "--git-path", marker).stdout.strip()
+        if (path / marker_path).exists():
+            raise SyncError("Repository has an unfinished Git operation")
+    if _git(path, "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none").stdout.strip():
         raise SyncError("Repository has uncommitted or untracked files")
 
     # FETCH_HEAD is used so an arbitrary remote-tracking ref is not assumed.
@@ -68,6 +101,6 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
     if ancestry.returncode == 1:
         return SyncResult("NEEDS_REVIEW", local_sha, upstream_sha, local_sha)
 
-    _git(path, "merge", "--ff-only", upstream_sha)
+    _git(path, "merge", "--ff-only", "--no-overwrite-ignore", upstream_sha)
     updated_sha = _git(path, "rev-parse", "HEAD").stdout.strip()
     return SyncResult("UPDATED", local_sha, upstream_sha, updated_sha)

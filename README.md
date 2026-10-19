@@ -28,6 +28,25 @@ python3 -m pytest -q
 
 The tests create isolated temporary Git repositories and never access GitHub.
 
+## Standalone CLI
+
+The core and CLI require no Camunda packages or Docker. Install with `pip install .`
+inside a virtual environment, then run:
+
+```bash
+git-upstream-sync /path/to/local/fork --branch main --upstream upstream
+```
+
+The configured remote must already exist. Output is JSON containing `status`,
+`previous_sha`, `upstream_sha`, and `current_sha`. Exit codes are 0 for an update
+or equality, 2 for `NEEDS_REVIEW`, and 1 for technical/precondition failures
+(error JSON on stderr). Argument parsing errors also use exit code 2.
+
+Synchronization refuses dirty/detached worktrees, unfinished Git operations,
+invalid branch/remote names, and overlapping calls from this tool. An advisory
+Linux lock does not prevent other Git tools from writing: use a dedicated checkout.
+Ignored files that conflict with an incoming tracked file are preserved.
+
 ## Camunda integration
 
 The Camunda BPMN model, worker, and local runtime instructions will follow as

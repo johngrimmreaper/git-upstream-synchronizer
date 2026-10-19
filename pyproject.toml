@@ -9,6 +9,9 @@ description = "A Git upstream sync proof of concept orchestrated by Camunda 8"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.scripts]
+git-upstream-sync = "git_upstream_synchronizer.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
