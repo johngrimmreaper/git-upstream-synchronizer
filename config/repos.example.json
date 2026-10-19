@@ -1,0 +1,7 @@
+{
+  "demo": {
+    "path": "/absolute/path/to/isolated/demo/fork",
+    "branch": "main",
+    "upstream": "upstream"
+  }
+}

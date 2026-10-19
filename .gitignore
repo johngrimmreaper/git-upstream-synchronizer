@@ -7,3 +7,6 @@ __pycache__/
 .env
 config/repos.json
 infra/camunda/
+
+/build/
+/dist/

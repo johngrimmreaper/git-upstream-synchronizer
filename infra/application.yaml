@@ -1,0 +1,48 @@
+# Local development only. Based on the bundled Camunda Run 8.9.26 configuration.
+server:
+  address: 127.0.0.1
+management:
+  server:
+    address: 127.0.0.1
+camunda:
+  data:
+    secondary-storage:
+      type: rdbms
+      rdbms:
+        url: jdbc:h2:file:./camunda-data/h2db
+        username: sa
+        password:
+        flushInterval: PT0.5S
+        queueSize: 1000
+  security:
+    initialization:
+      users:
+        - username: demo
+          password: demo
+          name: Demo
+          email: demo@example.com
+      defaultRoles:
+        admin:
+          users:
+            - demo
+    # By default authorization and api protection is disabled
+    authentication:
+      method: BASIC
+      unprotected-api: true
+    authorizations:
+      enabled: false
+  mcp:
+    enabled: false
+
+zeebe:
+  broker:
+    gateway:
+      network:
+        host: 127.0.0.1
+    network:
+      host: 127.0.0.1
+      advertisedHost: 127.0.0.1
+  gateway:
+    cluster:
+      initialContactPoints: zeebe:26502
+      memberId: identity

@@ -11,9 +11,11 @@ dependencies = []
 
 [project.scripts]
 git-upstream-sync = "git_upstream_synchronizer.cli:main"
+git-upstream-worker = "git_upstream_synchronizer.camunda_worker:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest==9.0.2"]
+camunda = ["camunda-orchestration-sdk==9.0.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

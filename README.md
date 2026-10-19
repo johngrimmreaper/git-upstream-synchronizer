@@ -49,8 +49,49 @@ Ignored files that conflict with an incoming tracked file are preserved.
 
 ## Camunda integration
 
-The Camunda BPMN model, worker, and local runtime instructions will follow as
-the next development milestone. The target is the Camunda 8.9 stable line.
+The optional adapter uses the official `camunda-orchestration-sdk==9.0.1` with
+Camunda Run **8.9.26**. SDK major 9 matches server 8.9. All Camunda imports stay
+in the worker and the optional demonstration backend.
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev,camunda]'
+sudo apt-get install --no-install-recommends openjdk-21-jre-headless
+bash scripts/install-camunda.sh
+```
+
+Start the official runtime in a terminal (the relative config path is necessary
+for this version of its launcher):
+
+```bash
+cd infra/camunda/c8run-8.9.26
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export SERVER_ADDRESS=127.0.0.1
+export JAVA_OPTS='-Xms128m -Xmx768m -XX:ActiveProcessorCount=2'
+./c8run start --config ../../application.yaml
+```
+
+The checked-in configuration binds development services to loopback. Do not
+set `MANAGEMENT_SERVER_ADDRESS` globally: the bundled Connectors runtime uses
+its main HTTP port for management. The core's separate management listener is
+bound in `infra/application.yaml` instead.
+
+From the project root in another terminal, run the reproducible scenarios:
+
+```bash
+.venv/bin/python scripts/demo.py --camunda
+```
+
+This deploys `bpmn/synchronize-repository.bpmn`, launches an external worker,
+and asserts three result paths, temporary fetch failure/recovery, and an incident
+when retries are exhausted. Each run creates fresh isolated Git repositories;
+logs and `report.json` remain in the printed temporary directory. The script
+stops its worker and leaves the runtime and final incident available in Operate
+at <http://127.0.0.1:8080/operate> (local development login: `demo` / `demo`).
+
+The standalone equivalent is `.venv/bin/python scripts/demo.py` and works
+without the SDK installed. `--prepare` creates only fixtures for manual use.
+Stop the runtime from its directory with `./c8run stop`.
 
 ## Design boundaries
 

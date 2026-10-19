@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+ xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+ xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+ xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+ xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ id="Definitions_GitSync" targetNamespace="https://github.com/johngrimmreaper/git-upstream-synchronizer">
+ <bpmn:process id="git-upstream-sync" name="Synchronize Git upstream" isExecutable="true">
+  <bpmn:startEvent id="Start" name="Requested"><bpmn:outgoing>ToSync</bpmn:outgoing></bpmn:startEvent>
+  <bpmn:serviceTask id="Synchronize" name="Synchronize repository">
+   <bpmn:extensionElements><zeebe:taskDefinition type="synchronize-repository" retries="3"/></bpmn:extensionElements>
+   <bpmn:incoming>ToSync</bpmn:incoming><bpmn:outgoing>ToResult</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:exclusiveGateway id="Result" name="Sync result">
+   <bpmn:incoming>ToResult</bpmn:incoming>
+   <bpmn:outgoing>Updated</bpmn:outgoing><bpmn:outgoing>UpToDate</bpmn:outgoing><bpmn:outgoing>NeedsReview</bpmn:outgoing>
+  </bpmn:exclusiveGateway>
+  <bpmn:endEvent id="EndUpdated" name="UPDATED"><bpmn:incoming>Updated</bpmn:incoming></bpmn:endEvent>
+  <bpmn:endEvent id="EndUpToDate" name="UP_TO_DATE"><bpmn:incoming>UpToDate</bpmn:incoming></bpmn:endEvent>
+  <bpmn:endEvent id="EndNeedsReview" name="NEEDS_REVIEW"><bpmn:incoming>NeedsReview</bpmn:incoming></bpmn:endEvent>
+  <bpmn:sequenceFlow id="ToSync" sourceRef="Start" targetRef="Synchronize"/>
+  <bpmn:sequenceFlow id="ToResult" sourceRef="Synchronize" targetRef="Result"/>
+  <bpmn:sequenceFlow id="Updated" name="UPDATED" sourceRef="Result" targetRef="EndUpdated">
+   <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= status = "UPDATED"</bpmn:conditionExpression>
+  </bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="UpToDate" name="UP_TO_DATE" sourceRef="Result" targetRef="EndUpToDate">
+   <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= status = "UP_TO_DATE"</bpmn:conditionExpression>
+  </bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="NeedsReview" name="NEEDS_REVIEW" sourceRef="Result" targetRef="EndNeedsReview">
+   <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">= status = "NEEDS_REVIEW"</bpmn:conditionExpression>
+  </bpmn:sequenceFlow>
+ </bpmn:process>
+ <bpmndi:BPMNDiagram id="Diagram"><bpmndi:BPMNPlane id="Plane" bpmnElement="git-upstream-sync">
+  <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="100" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+  <bpmndi:BPMNShape id="Synchronize_di" bpmnElement="Synchronize"><dc:Bounds x="200" y="160" width="160" height="80"/></bpmndi:BPMNShape>
+  <bpmndi:BPMNShape id="Result_di" bpmnElement="Result" isMarkerVisible="true"><dc:Bounds x="430" y="175" width="50" height="50"/></bpmndi:BPMNShape>
+  <bpmndi:BPMNShape id="EndUpdated_di" bpmnElement="EndUpdated"><dc:Bounds x="590" y="72" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="570" y="42" width="80" height="20"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+  <bpmndi:BPMNShape id="EndUpToDate_di" bpmnElement="EndUpToDate"><dc:Bounds x="590" y="182" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="570" y="222" width="90" height="20"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+  <bpmndi:BPMNShape id="EndNeedsReview_di" bpmnElement="EndNeedsReview"><dc:Bounds x="590" y="292" width="36" height="36"/><bpmndi:BPMNLabel><dc:Bounds x="558" y="336" width="110" height="20"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+  <bpmndi:BPMNEdge id="ToSync_di" bpmnElement="ToSync"><di:waypoint x="136" y="200"/><di:waypoint x="200" y="200"/></bpmndi:BPMNEdge>
+  <bpmndi:BPMNEdge id="ToResult_di" bpmnElement="ToResult"><di:waypoint x="360" y="200"/><di:waypoint x="430" y="200"/></bpmndi:BPMNEdge>
+  <bpmndi:BPMNEdge id="Updated_di" bpmnElement="Updated"><di:waypoint x="455" y="175"/><di:waypoint x="455" y="90"/><di:waypoint x="590" y="90"/></bpmndi:BPMNEdge>
+  <bpmndi:BPMNEdge id="UpToDate_di" bpmnElement="UpToDate"><di:waypoint x="480" y="200"/><di:waypoint x="590" y="200"/></bpmndi:BPMNEdge>
+  <bpmndi:BPMNEdge id="NeedsReview_di" bpmnElement="NeedsReview"><di:waypoint x="455" y="225"/><di:waypoint x="455" y="310"/><di:waypoint x="590" y="310"/></bpmndi:BPMNEdge>
+ </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>
