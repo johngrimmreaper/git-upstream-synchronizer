@@ -162,6 +162,31 @@ The standalone demonstration needs no Camunda SDK:
 .venv/bin/python scripts/demo.py
 ```
 
+### Worker crash recovery
+
+With the same local runtime running, stop other demonstration workers and run:
+
+```bash
+.venv/bin/python scripts/demo_crash_recovery.py
+```
+
+This creates fresh local fixtures and starts a fault-injection worker that calls
+the production job handler. After Git returns `UPDATED`, that worker exits abruptly
+with `os._exit(23)` before the SDK can send job completion. The script observes
+`TIMED_OUT` with all three retries remaining, then starts the normal worker.
+The same job completes as `UP_TO_DATE`, reaches `EndUpToDate`, and leaves HEAD
+and the commit count unchanged. No incident is expected for this successful recovery.
+
+The fault worker uses a 15-second activation timeout to keep this demonstration
+short. The normal worker retains its ten-minute timeout. The script saves the
+before-crash receipt, both worker logs, and `report.json` in its printed temporary
+directory. It cancels its process instance if verification fails.
+
+This verifies a crash after the Git effect and before job completion. It does not
+simulate a crash inside Git's checkout/ref writes or a lost response after Camunda
+has already accepted completion. No fault-injection behavior is installed in the
+synchronization core or normal worker.
+
 ### Manual demonstration: deploy, run the worker, start an instance
 
 Prepare new fixtures. Choose another directory name if it already exists:

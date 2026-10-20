@@ -1,8 +1,8 @@
-# Verification record — 2026-10-24
+# Verification record — 2026-10-26
 
 Validation covered the synchronization core, standalone CLI, optional Camunda
-worker, and executable BPMN process. The environment and integration results below
-were recorded on 2026-10-24.
+worker, and executable BPMN process. Initial integration results were recorded on
+2026-10-24; crash-recovery verification was added on 2026-10-26.
 
 ## Environment
 
@@ -13,7 +13,7 @@ were recorded on 2026-10-24.
   1 GB. Approximately 12 GB disk remained free after setup.
 - No Docker containers/images were created for this demonstration.
 
-## Automated checks
+## Automated checks — 2026-10-24
 
 | Check | Observed result |
 | --- | --- |
@@ -61,11 +61,44 @@ process-definition importer.
 The manual README procedure was also run through the installed console entry
 point: process `2251799813685970` completed and its Git file change was verified.
 
+## Crash recovery — 2026-10-26
+
+The full pytest suite passed with **34 tests**. Without the optional SDK, the core
+and CLI suite passed with **19 tests** and the worker module was skipped. Two new
+subprocess tests kill an isolated synchronization process group during a blocked
+fetch or in a post-merge hook after the fast-forward. A repeated call returns
+`UPDATED` or `UP_TO_DATE`, respectively, and the existing advisory lock file does
+not prevent recovery after the process exits.
+
+The live `.venv/bin/python scripts/demo_crash_recovery.py` verification passed:
+
+| Check | Observed result |
+| --- | --- |
+| Process instance | `2251799813734845` |
+| Job key before and after redelivery | `2251799813734851` |
+| First execution | `UPDATED`; upstream file appeared and HEAD advanced |
+| Abrupt exit | Fault worker called `os._exit(23)` before SDK job completion |
+| Activation timeout | `TIMED_OUT`; retries remained 3; no result status had reached the process |
+| Replacement | Normal worker completed the same job as `UP_TO_DATE` |
+| Git after redelivery | HEAD and commit count unchanged |
+| Process outcome | `EndUpToDate`; no incident; retries remained 3 |
+
+The fault worker used a 15-second activation timeout. The normal worker and core
+were unchanged. Evidence was written to `/tmp/git-sync-demo-c3dtf8u8/report.json`,
+`before-crash.json`, `crash-worker.log`, and `recovery-worker.log` in that directory.
+The fault worker's SDK resource-tracker warning is expected after abrupt exit;
+the replacement worker shut down normally.
+
+The original Camunda demonstration also passed again on 2026-10-26: all three
+business outcomes, temporary fetch failure/recovery, and an exhausted-retry
+incident were verified. Its report is `/tmp/git-sync-demo-uqpo1zb7/report.json`.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real
-external network outage. Hard crashes during Git updates, acknowledgement loss,
-job-timeout redelivery, multi-host races, production authentication, resource soak,
-LFS/submodule behavior, remote pushes, and disaster recovery were not demonstrated.
-Worker-crash recovery is documented from Camunda semantics and core idempotency,
-not presented as an observed test result.
+external network outage. The crash demo stops after the Git effect but before
+sending job completion. The subprocess tests kill the full test process group,
+including its Git children. They do not verify crashes inside checkout/ref writes,
+a Python-only crash that leaves Git running, or lost completion responses after
+Camunda accepts the command. Multi-host races, production authentication, resource
+soak, LFS/submodule behavior, remote pushes, and disaster recovery remain untested.

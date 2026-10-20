@@ -53,9 +53,17 @@ This is at-least-once job handling with an idempotent Git effect, not exactly-on
 execution or a distributed transaction. The advisory lock prevents overlapping
 calls from this tool; it cannot coordinate unrelated Git applications.
 
-The actual demonstration verified temporary failure/recovery and exhausted-retry
-incidents. Killing a worker during a Git update has not been demonstrated; its
-recovery explanation follows Camunda job semantics and the tested idempotent core.
+The demonstrations verify temporary fetch failure/recovery, exhausted-retry
+incidents, and an abrupt worker exit after Git updates but before job completion.
+The crash demo uses the production handler, a 15-second activation timeout, and
+then the normal replacement worker. Camunda records the timeout without consuming
+retries; the same job completes as `UP_TO_DATE` without another Git change.
+
+Separate core tests send `SIGKILL` to an isolated process group while Git is blocked
+during fetch or in a post-merge hook after the fast-forward. Both verify that the
+repository lock is released and another invocation can proceed. A crash inside
+checkout/ref writes, a surviving orphan Git process, and a lost completion response
+after Camunda accepts the command remain outside the verified scope.
 
 ## 4. Which architectural trade-offs were considered?
 
@@ -88,8 +96,8 @@ signature checks are required; neither is implemented.
 Protect the Camunda API with authentication and authorization, run the worker with
 limited filesystem access, and keep secrets out of variables, remotes, and logs.
 Use supported production storage/runtime deployment, backups, resource limits,
-incident ownership, log retention, and monitoring. Test worker crashes during Git
-operations and loss of job-completion acknowledgements. Review Camunda's commercial
+incident ownership, log retention, and monitoring. Extend fault tests to partial
+Git writes, orphan Git processes, and loss of completion responses. Review Camunda's commercial
 production licensing. Camunda Run/H2 and the current demonstration are insufficient
 as a production platform.
 
@@ -106,6 +114,7 @@ timer instead of operating a workflow engine.
 | `src/git_upstream_synchronizer/camunda_worker.py` | Resolve a repository ID through local configuration, call the core, and translate results or exceptions into Camunda job handling |
 | `bpmn/synchronize-repository.bpmn` | Dispatch the Service Task and route its result to one of three End Events |
 | `scripts/demo.py` | Create isolated Git repositories and verify synchronization outcomes and Camunda retry behavior |
+| `scripts/demo_crash_recovery.py` | Verify job timeout redelivery after an abrupt exit between the Git update and Camunda completion |
 
 The central Git decision compares the local and fetched commit IDs. Equal commits
 require no update. An ancestry check permits a fast-forward only when local HEAD
