@@ -156,20 +156,45 @@ def run_camunda(root: Path) -> dict:
                 print(f"Automatic retry recovered: process={key}, status={recovered['status']}", flush=True)
                 git(fork, "remote", "set-url", "upstream", unavailable)
                 incident_key = start("failure")
-                def incident():
+                def incident(process_key):
                     items = client.search_incidents(data=sdk.IncidentSearchQuery(
-                        filter_=sdk.IncidentSearchQueryFilter(process_instance_key=incident_key))).items
+                        filter_=sdk.IncidentSearchQueryFilter(process_instance_key=process_key))).items
                     return next((i for i in items if i.state.value == "ACTIVE"), None)
-                active = wait_for(incident, "incident after exhausted retries")
+                active = wait_for(lambda: incident(incident_key), "incident after exhausted retries")
                 jobs = client.search_jobs(data=sdk.JobSearchQuery(
                     filter_=sdk.JobSearchQueryFilter(process_instance_key=incident_key))).items
                 assert jobs and jobs[0].retries == 0
                 assert git(fork, "rev-parse", "HEAD") == recovered["current_sha"]
                 assert "status" not in variables(incident_key)
                 print(f"Active incident: process={incident_key}, retries=0, incident={active.incident_key}", flush=True)
+                git(fork, "remote", "set-url", "upstream", str(root / "upstream.git"))
+                lock = fork / ".git" / "index.lock"
+                lock_content = b"isolated demo Git lock\n"
+                with lock.open("xb") as fixture:
+                    fixture.write(lock_content)
+                try:
+                    blocked_key = start("failure")
+                    blocked = wait_for(lambda: incident(blocked_key), "Git lock incident")
+                    blocked_jobs = client.search_jobs(data=sdk.JobSearchQuery(
+                        filter_=sdk.JobSearchQueryFilter(process_instance_key=blocked_key))).items
+                    assert len(blocked_jobs) == 1 and blocked_jobs[0].retries == 0
+                    assert "Git lock file: index.lock" in blocked_jobs[0].error_message
+                    assert lock.read_bytes() == lock_content
+                    assert git(fork, "rev-parse", "HEAD") == recovered["current_sha"]
+                    assert "status" not in variables(blocked_key)
+                    print(f"Git lock refused: process={blocked_key}, retries=0, lock preserved", flush=True)
+                finally:
+                    # Only the demo removes the synthetic lock it created.
+                    if lock.exists() and lock.read_bytes() == lock_content:
+                        lock.unlink()
+                repaired = invoke("failure")
+                assert repaired["status"] == "UP_TO_DATE"
+                print("After fixture cleanup: new process completed as UP_TO_DATE", flush=True)
                 return {"results": results, "retry_recovered_process": str(key),
                         "incident_process": str(incident_key), "incident_key": str(active.incident_key),
-                        "process_instance_keys": keys}
+                        "git_lock_incident_process": str(blocked_key),
+                        "git_lock_incident_key": str(blocked.incident_key),
+                        "git_lock_recovery": repaired, "process_instance_keys": keys}
             finally:
                 worker.terminate()
                 try:

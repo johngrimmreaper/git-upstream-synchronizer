@@ -77,3 +77,16 @@ def test_valid_allowlist(tmp_path):
     path.write_text(json.dumps(data))
     assert worker.load_repositories(path) == data
 
+
+
+def test_git_write_lock_creates_incident_without_retry(repositories):
+    _, fork = repositories
+    before = git(fork, "rev-parse", "HEAD")
+    lock = fork / ".git" / "index.lock"
+    lock.write_bytes(b"unfinished write\n")
+    with pytest.raises(sdk.JobFailure) as caught:
+        worker.handle_job(job(), {"demo": {"path": str(fork)}})
+    assert caught.value.retries == 0
+    assert "Git lock file: index.lock" in caught.value.message
+    assert lock.read_bytes() == b"unfinished write\n"
+    assert git(fork, "rev-parse", "HEAD") == before

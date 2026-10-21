@@ -149,3 +149,47 @@ def test_killed_sync_keeps_lock_until_git_exits(repositories, phase, kill_scope)
     assert result.status == ("UPDATED" if phase == "fetch" else "UP_TO_DATE")
     assert result.current_sha == upstream
     assert (fork / "after-crash.txt").read_text() == "upstream change\n"
+
+
+@pytest.mark.parametrize("lock_name", ["index.lock", "HEAD.lock", "refs/heads/main.lock", "packed-refs.lock"])
+def test_git_lock_is_preserved_and_refused_before_fetch(repositories, lock_name):
+    _, fork = repositories
+    before = git(fork, "rev-parse", "HEAD")
+    lock = Path(git(fork, "rev-parse", "--path-format=absolute", "--git-path", lock_name))
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_bytes(b"unfinished Git write\n")
+    fetch_head = fork / ".git" / "FETCH_HEAD"
+    previous_fetch = fetch_head.read_bytes() if fetch_head.exists() else None
+    with pytest.raises(SyncError, match="Git lock file"):
+        synchronize_repository(fork)
+    assert lock.read_bytes() == b"unfinished Git write\n"
+    assert git(fork, "rev-parse", "HEAD") == before
+    assert (fetch_head.read_bytes() if fetch_head.exists() else None) == previous_fetch
+
+
+def test_partial_worktree_write_is_preserved_and_refused_before_fetch(repositories):
+    _, fork = repositories
+    before = git(fork, "rev-parse", "HEAD")
+    tracked = fork / "initial.txt"
+    tracked.write_bytes(b"partial\x00write")
+    fetch_head = fork / ".git" / "FETCH_HEAD"
+    previous_fetch = fetch_head.read_bytes() if fetch_head.exists() else None
+    with pytest.raises(SyncError, match="uncommitted or untracked"):
+        synchronize_repository(fork)
+    assert tracked.read_bytes() == b"partial\x00write"
+    assert git(fork, "rev-parse", "HEAD") == before
+    assert (fetch_head.read_bytes() if fetch_head.exists() else None) == previous_fetch
+
+
+def test_corrupt_index_is_preserved_and_refused_before_fetch(repositories):
+    _, fork = repositories
+    before = git(fork, "rev-parse", "HEAD")
+    index = fork / ".git" / "index"
+    index.write_bytes(b"truncated index")
+    fetch_head = fork / ".git" / "FETCH_HEAD"
+    previous_fetch = fetch_head.read_bytes() if fetch_head.exists() else None
+    with pytest.raises(GitCommandError, match="status failed"):
+        synchronize_repository(fork)
+    assert index.read_bytes() == b"truncated index"
+    assert git(fork, "rev-parse", "HEAD") == before
+    assert (fetch_head.read_bytes() if fetch_head.exists() else None) == previous_fetch

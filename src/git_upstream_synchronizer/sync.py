@@ -49,6 +49,8 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
 
     The repository must be clean, on the selected branch, and configured with an
     upstream remote. Divergent histories are reported, never merged or overwritten.
+    Recognized Git write locks require operator inspection before fetching; the
+    synchronizer never removes them or attempts to repair damaged checkout state.
     This intentionally does not push the result to a hosting service.
     """
     try:
@@ -87,6 +89,10 @@ def _synchronize_locked(path: Path, branch: str, upstream: str, lock_fd: int) ->
         marker_path = _git(path, "rev-parse", "--git-path", marker).stdout.strip()
         if (path / marker_path).exists():
             raise SyncError("Repository has an unfinished Git operation")
+    for lock_name in ("index.lock", "HEAD.lock", f"refs/heads/{branch}.lock", "packed-refs.lock"):
+        lock_path = _git(path, "rev-parse", "--git-path", lock_name).stdout.strip()
+        if (path / lock_path).exists():
+            raise SyncError(f"Repository has a Git lock file: {lock_name}; inspect Git activity before retrying")
     if _git(path, "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none").stdout.strip():
         raise SyncError("Repository has uncommitted or untracked files")
 
