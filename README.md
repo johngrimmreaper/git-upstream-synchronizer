@@ -68,6 +68,10 @@ print(result.status, result.current_sha)
 The engine refuses dirty or detached worktrees, unfinished Git operations, invalid
 branch names, arbitrary remote URLs in place of configured names, and overlapping
 calls from this tool. It preserves ignored files that conflict with incoming files.
+Before fetching, it also refuses Git's index, HEAD, selected-branch, and packed-refs
+lock files. A Git lock can indicate an active command or an interrupted write;
+the tool preserves it and requires operator inspection.
+
 A nonblocking Linux advisory lock covers the operation. The held descriptor is
 passed explicitly to `git fetch` and `git merge`, so a surviving Git child retains
 the lock if Python is killed. Another synchronization refuses to start until the
@@ -154,10 +158,13 @@ and asserts the following observable effects:
    the remote lets Camunda retry automatically and complete the same instance.
 5. Persistent fetch failure: three attempts exhaust retries and create an active
    incident; no result status is falsely returned and HEAD remains unchanged.
+6. Git write lock: an isolated `index.lock` causes an immediate zero-retry incident.
+   HEAD and the lock contents are preserved. After removing its own synthetic
+   fixture, the demonstration starts a new instance that completes as `UP_TO_DATE`.
 
 The script checks the three named BPMN end events through the API. `worker.log`
 and `report.json` remain in the printed directory for inspection. Its worker stops
-on completion; the final incident remains visible in Operate. Git fixture commits
+on completion; the incidents remain visible in Operate. Git fixture commits
 are intentionally unsigned and isolated; implementation commits are signed.
 
 The standalone demonstration needs no Camunda SDK:
@@ -186,10 +193,12 @@ short. The normal worker retains its ten-minute timeout. The script saves the
 before-crash receipt, both worker logs, and `report.json` in its printed temporary
 directory. It cancels its process instance if verification fails.
 
-This verifies a crash after the Git effect and before job completion. It does not
-simulate a crash inside Git's checkout/ref writes or a lost response after Camunda
-has already accepted completion. No fault-injection behavior is installed in the
-synchronization core or normal worker.
+This Camunda demonstration verifies a crash after the Git effect and before job
+completion. Separate core tests interrupt a real checkout after one file is written
+but before the index and branch are updated. A repeat call preserves the partial
+files and Git lock and requires operator inspection. Ref replacement, power loss,
+and lost responses after Camunda accepts completion remain unverified.
+No fault-injection behavior is installed in the core or normal worker.
 
 ### Manual demonstration: deploy, run the worker, start an instance
 
@@ -261,8 +270,9 @@ Zero retries creates an incident. Operators inspect the error, fix the cause, re
 the worker if needed, and retry/resolve the incident in Operate. Retrying unchanged
 bad credentials or a permanently missing remote cannot fix the underlying problem.
 
-`SyncError` identifies unsafe input/state, such as a dirty checkout or an unknown
-repository ID. The worker fails that job with zero retries for operator attention.
+`SyncError` identifies unsafe input/state, such as a dirty checkout, a Git write
+lock, or an unknown repository ID. The worker fails that job with zero retries
+for operator attention. Git locks are never removed automatically.
 Unexpected exceptions escape to the SDK, which fails the job and decrements retries
 with its default backoff (zero). Failures are never translated into success statuses.
 
@@ -298,6 +308,7 @@ The focused crash tests require neither Camunda nor its SDK:
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_safety.py -k killed_sync
+.venv/bin/python -m pytest -q tests/test_interrupted_checkout.py
 ```
 
 See [verification evidence](docs/verification.md) for what was actually tested,

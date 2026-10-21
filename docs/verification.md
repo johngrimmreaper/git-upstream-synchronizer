@@ -119,14 +119,48 @@ outcomes, retry recovery, and incident creation. The crash report is
 `/tmp/git-sync-demo-yrluh0i6/report.json`: process `2251799813735745` redelivered
 job `2251799813735751`, completed as `UP_TO_DATE`, and retained all three retries.
 
+## Interrupted checkout and linked worktrees — 2026-10-26
+
+The full suite passed with **48 tests**. Without the optional SDK, **32 tests**
+passed and the worker module was skipped. Regular-checkout regressions cover four
+Git locks, partially changed file contents, and a corrupt index; all are refused
+without discarding evidence or fetching. An adapter test verifies that a Git
+write lock requests zero retries.
+
+Five additional real-Git checks cover the interrupted-checkout boundary and Git
+lock resolution in linked worktrees. A required smudge filter blocks checkout
+after `initial.txt` changes but before the index and HEAD advance. Killing the
+isolated process group leaves the partial worktree and `index.lock` in place.
+A repeat call raises `SyncError` and preserves the worktree bytes, lock bytes,
+and original HEAD; no repair or lock removal is attempted.
+
+The other four checks place Git's index, HEAD, selected-branch, or packed-refs
+lock in a linked worktree. Each is refused before fetching, including when the
+commits are already equal. Git resolves worktree-specific and shared paths.
+The checks also preserve `FETCH_HEAD`. They fail against the published baseline
+and pass with the Git-lock precondition check.
+
+The extended Camunda demonstration passed; its report is
+`/tmp/git-sync-demo-wg8gl8bx/report.json`. It verified the three business outcomes,
+automatic retry recovery, exhausted retries, and an immediate Git-lock incident
+for process `2251799813741159`. After synthetic fixture cleanup, a new instance
+completed as `UP_TO_DATE`. The crash demonstration passed with
+process `2251799813740994` and job `2251799813741000`, preserving all three retries
+and completing as `UP_TO_DATE`; evidence is
+`/tmp/git-sync-demo-f6icuis6/report.json`. An earlier attempt could not observe the
+timeout because a competing demonstration worker had already completed the job;
+the repeat ran without another worker.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real
 external network outage. The crash demo stops after the Git effect but before
 sending job completion. Subprocess tests cover both a Python-only crash with Git
-still running and termination of the entire test process group. They do not verify
-crashes inside checkout/ref writes or lost completion responses after Camunda
-accepts the command. A hung orphan/helper can retain the lock until it is stopped;
+still running and termination of the entire test process group. The checkout
+test interrupts a real file update before the index and branch advance; it
+verifies safe refusal afterward. Crashes during ref replacement, power loss,
+and lost completion responses after Camunda accepts the command remain unverified.
+A hung orphan/helper can retain the lock until it is stopped;
 there is no automatic orphan reaper. Multi-host races, production authentication,
 resource soak, LFS/submodule behavior, remote pushes, and disaster recovery remain
 untested.

@@ -69,8 +69,20 @@ The descriptor is passed with Python's `subprocess` `pass_fds` argument only for
 fetch and merge. This keeps the lock alive for those Git operations without
 changing the public core function or adding a process-management framework.
 A hung orphan can keep the lock held and requires operator attention; deleting
-the lock file would bypass the protection. Crashes inside checkout/ref writes and
-lost completion responses after Camunda accepts the command remain unverified.
+the lock file would bypass the protection.
+
+Git's own write locks are separate. Before fetching, the core checks the index,
+HEAD, selected branch, and packed-refs locks through Git's path resolver, including
+linked worktrees. A remaining lock is a precondition failure requiring inspection,
+even if the branch already appears up to date. The tool never removes it.
+
+A real checkout interruption is also tested: a smudge filter blocks Git after one
+file is written but before the index and branch update, then the isolated process
+group is killed. A repeat call preserves the changed files, old HEAD, and Git lock
+and refuses automatic recovery. Other tests cover a damaged index and partial
+file contents. These checks establish safe refusal, not crash-atomic Git updates.
+Ref replacement, power loss, and lost completion responses after Camunda accepts
+the command remain unverified.
 
 ## 4. Which architectural trade-offs were considered?
 
@@ -103,8 +115,8 @@ signature checks are required; neither is implemented.
 Protect the Camunda API with authentication and authorization, run the worker with
 limited filesystem access, and keep secrets out of variables, remotes, and logs.
 Use supported production storage/runtime deployment, backups, resource limits,
-incident ownership, log retention, and monitoring. Extend fault tests to partial
-Git writes, hung helpers, and loss of completion responses. Review Camunda's
+incident ownership, log retention, and monitoring. Extend fault tests to ref
+replacement, power loss, hung helpers, and loss of completion responses. Review Camunda's
 commercial production licensing. Camunda Run/H2 and the current demonstration are insufficient
 as a production platform.
 
