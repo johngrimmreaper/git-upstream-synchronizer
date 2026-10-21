@@ -24,12 +24,16 @@ class SyncResult:
     current_sha: str
 
 
-def _git(repo: Path, *args: str, allowed_exit_codes: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[str]:
+def _git(
+    repo: Path, *args: str, allowed_exit_codes: tuple[int, ...] = (0,),
+    lock_fd: int | None = None,
+) -> subprocess.CompletedProcess[str]:
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), *args],
             text=True, capture_output=True, check=False, timeout=30,
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            pass_fds=() if lock_fd is None else (lock_fd,),
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GitCommandError(f"Unable to run Git operation: {args[0]}") from error
@@ -68,12 +72,12 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
                 raise GitCommandError("Another synchronization is running") from error
-            return _synchronize_locked(path, branch, upstream)
+            return _synchronize_locked(path, branch, upstream, lock.fileno())
     except OSError as error:
         raise GitCommandError("Unable to lock repository") from error
 
 
-def _synchronize_locked(path: Path, branch: str, upstream: str) -> SyncResult:
+def _synchronize_locked(path: Path, branch: str, upstream: str, lock_fd: int) -> SyncResult:
     current_branch = _git(
         path, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_exit_codes=(0, 1),
     ).stdout.strip()
@@ -87,7 +91,8 @@ def _synchronize_locked(path: Path, branch: str, upstream: str) -> SyncResult:
         raise SyncError("Repository has uncommitted or untracked files")
 
     # FETCH_HEAD is used so an arbitrary remote-tracking ref is not assumed.
-    _git(path, "fetch", "--no-tags", upstream, f"refs/heads/{branch}")
+    # Mutating Git children retain the lock if their Python parent dies.
+    _git(path, "fetch", "--no-tags", upstream, f"refs/heads/{branch}", lock_fd=lock_fd)
     local_sha = _git(path, "rev-parse", f"refs/heads/{branch}").stdout.strip()
     upstream_sha = _git(path, "rev-parse", "FETCH_HEAD").stdout.strip()
 
@@ -101,6 +106,6 @@ def _synchronize_locked(path: Path, branch: str, upstream: str) -> SyncResult:
     if ancestry.returncode == 1:
         return SyncResult("NEEDS_REVIEW", local_sha, upstream_sha, local_sha)
 
-    _git(path, "merge", "--ff-only", "--no-overwrite-ignore", upstream_sha)
+    _git(path, "merge", "--ff-only", "--no-overwrite-ignore", upstream_sha, lock_fd=lock_fd)
     updated_sha = _git(path, "rev-parse", "HEAD").stdout.strip()
     return SyncResult("UPDATED", local_sha, upstream_sha, updated_sha)

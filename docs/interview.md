@@ -59,11 +59,18 @@ The crash demo uses the production handler, a 15-second activation timeout, and
 then the normal replacement worker. Camunda records the timeout without consuming
 retries; the same job completes as `UP_TO_DATE` without another Git change.
 
-Separate core tests send `SIGKILL` to an isolated process group while Git is blocked
-during fetch or in a post-merge hook after the fast-forward. Both verify that the
-repository lock is released and another invocation can proceed. A crash inside
-checkout/ref writes, a surviving orphan Git process, and a lost completion response
-after Camunda accepts the command remain outside the verified scope.
+Core tests send `SIGKILL` either to Python alone or to its isolated process group,
+while Git is blocked during fetch or in a post-merge hook after the fast-forward.
+If only Python dies, the surviving Git child retains the inherited lock descriptor
+and another synchronization is rejected. Once Git exits, a repeat call proceeds
+as `UPDATED` or `UP_TO_DATE`. Killing the whole group releases the lock as well.
+
+The descriptor is passed with Python's `subprocess` `pass_fds` argument only for
+fetch and merge. This keeps the lock alive for those Git operations without
+changing the public core function or adding a process-management framework.
+A hung orphan can keep the lock held and requires operator attention; deleting
+the lock file would bypass the protection. Crashes inside checkout/ref writes and
+lost completion responses after Camunda accepts the command remain unverified.
 
 ## 4. Which architectural trade-offs were considered?
 
@@ -97,8 +104,8 @@ Protect the Camunda API with authentication and authorization, run the worker wi
 limited filesystem access, and keep secrets out of variables, remotes, and logs.
 Use supported production storage/runtime deployment, backups, resource limits,
 incident ownership, log retention, and monitoring. Extend fault tests to partial
-Git writes, orphan Git processes, and loss of completion responses. Review Camunda's commercial
-production licensing. Camunda Run/H2 and the current demonstration are insufficient
+Git writes, hung helpers, and loss of completion responses. Review Camunda's
+commercial production licensing. Camunda Run/H2 and the current demonstration are insufficient
 as a production platform.
 
 None of that requires adding Camunda types to the synchronization engine. If the

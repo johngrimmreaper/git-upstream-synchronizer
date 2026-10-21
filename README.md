@@ -68,9 +68,13 @@ print(result.status, result.current_sha)
 The engine refuses dirty or detached worktrees, unfinished Git operations, invalid
 branch names, arbitrary remote URLs in place of configured names, and overlapping
 calls from this tool. It preserves ignored files that conflict with incoming files.
-A nonblocking Linux advisory lock covers the operation and releases on process
-exit. Other Git applications do not honor this lock: use a dedicated checkout and
-avoid manual changes while synchronization is running. Repositories and their
+A nonblocking Linux advisory lock covers the operation. The held descriptor is
+passed explicitly to `git fetch` and `git merge`, so a surviving Git child retains
+the lock if Python is killed. Another synchronization refuses to start until the
+child releases it. Linux releases the lock when its last inherited descriptor
+closes; the lock file itself can remain on disk. Do not delete that file to bypass
+an active lock. Other Git applications do not honor it: use a dedicated checkout
+and avoid manual changes while synchronization is running. Repositories and their
 Git configuration/hooks must be trusted; this tool is not a sandbox.
 
 ## Optional Camunda environment
@@ -262,8 +266,12 @@ repository ID. The worker fails that job with zero retries for operator attentio
 Unexpected exceptions escape to the SDK, which fails the job and decrements retries
 with its default backoff (zero). Failures are never translated into success statuses.
 
-Each Git subprocess has a 30-second timeout and interactive Git terminal prompts
-are disabled. Credential helpers/SSH must be configured for unattended operation.
+Each Git subprocess has a 30-second timeout while its Python caller is running;
+interactive Git terminal prompts are disabled. Credential helpers/SSH must be
+configured for unattended operation. If Python is killed, its timeout logic stops.
+An orphan Git process or helper retaining the lock can therefore block later calls
+until it finishes or an operator stops it. Lock contention remains a technical
+failure handled by the existing retry/incident policy.
 The worker activates one job at a time, in the SDK's thread strategy, with a ten-minute
 job timeout. This keeps blocking Git calls outside the SDK's polling loop and gives
 the series of bounded commands time to finish.
@@ -286,6 +294,12 @@ Core and CLI tests use temporary local repositories and work without the SDK;
 worker tests automatically skip unless the optional SDK is installed. With
 `.[dev,camunda]` installed, all adapter tests run without contacting a server.
 The end-to-end demonstration is explicit and separate from ordinary pytest runs.
+The focused crash tests require neither Camunda nor its SDK:
+
+```bash
+.venv/bin/python -m pytest -q tests/test_safety.py -k killed_sync
+```
+
 See [verification evidence](docs/verification.md) for what was actually tested,
 and [architecture and design rationale](docs/interview.md) for the five interview questions.
 

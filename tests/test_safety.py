@@ -76,7 +76,8 @@ def test_ignored_file_is_not_overwritten(repositories):
 
 
 @pytest.mark.parametrize("phase", ["fetch", "post-merge"])
-def test_killed_sync_releases_lock_and_can_be_repeated(repositories, phase):
+@pytest.mark.parametrize("kill_scope", ["group", "parent"])
+def test_killed_sync_keeps_lock_until_git_exits(repositories, phase, kill_scope):
     seed, fork = repositories
     before = git(fork, "rev-parse", "HEAD")
     commit_file(seed, "after-crash.txt", "upstream change\n")
@@ -84,7 +85,10 @@ def test_killed_sync_releases_lock_and_can_be_repeated(repositories, phase):
     upstream = git(seed, "rev-parse", "HEAD")
     blocker = fork / ".git" / ("test-upload-pack" if phase == "fetch" else "hooks/post-merge")
     marker = Path(str(blocker) + ".reached")
-    blocker.write_text('#!/bin/sh\n: > "$0.reached"\nexec sleep 60\n')
+    release = Path(str(blocker) + ".release")
+    tail = 'exec git-upload-pack "$@"\n' if phase == "fetch" else "exit 0\n"
+    blocker.write_text('#!/bin/sh\n: > "$0.reached"\n'
+                       'while [ ! -e "$0.release" ]; do sleep 0.02; done\n' + tail)
     blocker.chmod(0o755)
     if phase == "fetch":
         git(fork, "config", "remote.upstream.uploadpack", str(blocker))
@@ -106,15 +110,36 @@ def test_killed_sync_releases_lock_and_can_be_repeated(repositories, phase):
         assert git(fork, "rev-parse", "HEAD") == expected_sha
         with pytest.raises(GitCommandError, match="Another synchronization"):
             synchronize_repository(fork)
-        # Kill the child Git/hook processes as well as their Python parent.
-        os.killpg(process.pid, signal.SIGKILL)
+        if kill_scope == "group":
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()  # The blocked Git child remains alive.
         process.wait(timeout=5)
         assert process.returncode == -signal.SIGKILL
         assert git(fork, "rev-parse", "HEAD") == expected_sha
+        if kill_scope == "parent":
+            with (fork / ".git" / "upstream-synchronizer.lock").open("a") as probe:
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with pytest.raises(GitCommandError, match="Another synchronization"):
+                synchronize_repository(fork)
+            release.touch()
+            deadline = time.monotonic() + 5
+            while True:
+                try:
+                    with (fork / ".git" / "upstream-synchronizer.lock").open("a") as probe:
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    assert time.monotonic() < deadline, "Orphan Git did not release its lock"
+                    time.sleep(0.02)
     finally:
-        if process.poll() is None:
+        release.touch()
+        try:
             os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=5)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=5)
         process.communicate(timeout=5)
         blocker.unlink()
         if phase == "fetch":

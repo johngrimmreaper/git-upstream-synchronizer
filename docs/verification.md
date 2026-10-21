@@ -93,12 +93,40 @@ The original Camunda demonstration also passed again on 2026-10-26: all three
 business outcomes, temporary fetch failure/recovery, and an exhausted-retry
 incident were verified. Its report is `/tmp/git-sync-demo-uqpo1zb7/report.json`.
 
+## Surviving Git child protection — 2026-10-26
+
+A regression test reproduced a lock-lifetime defect: killing only Python during
+fetch left Git running but released the synchronizer's advisory lock. The core
+now passes the held descriptor explicitly to fetch and merge with `pass_fds`.
+The Git child therefore retains the lock until it exits, even after Python dies.
+
+The full suite passed with **36 tests**; without the optional SDK, **21 tests**
+passed and the worker test module was skipped. The crash test now covers four
+combinations: fetch or post-merge, with only Python killed or the entire isolated
+process group killed. Each verifies the branch state and eventual safe repeat.
+In the parent-only cases, another synchronization is rejected while Git is alive
+and accepted after its inherited lock is released.
+
+The change is confined to core lock handling, private helpers, the existing
+safety test, and these documentation updates. It adds no dependency or Camunda-specific logic.
+Linux [flock lifetime](https://man7.org/linux/man-pages/man2/flock.2.html) follows
+open file descriptions; closing only the Python copy must not release protection
+while a mutating Git child is still running.
+
+Both live Camunda demonstrations passed after the fix. The normal demonstration's
+report is `/tmp/git-sync-demo-pmxrxhg7/report.json`; it verified all three business
+outcomes, retry recovery, and incident creation. The crash report is
+`/tmp/git-sync-demo-yrluh0i6/report.json`: process `2251799813735745` redelivered
+job `2251799813735751`, completed as `UP_TO_DATE`, and retained all three retries.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real
 external network outage. The crash demo stops after the Git effect but before
-sending job completion. The subprocess tests kill the full test process group,
-including its Git children. They do not verify crashes inside checkout/ref writes,
-a Python-only crash that leaves Git running, or lost completion responses after
-Camunda accepts the command. Multi-host races, production authentication, resource
-soak, LFS/submodule behavior, remote pushes, and disaster recovery remain untested.
+sending job completion. Subprocess tests cover both a Python-only crash with Git
+still running and termination of the entire test process group. They do not verify
+crashes inside checkout/ref writes or lost completion responses after Camunda
+accepts the command. A hung orphan/helper can retain the lock until it is stopped;
+there is no automatic orphan reaper. Multi-host races, production authentication,
+resource soak, LFS/submodule behavior, remote pushes, and disaster recovery remain
+untested.
