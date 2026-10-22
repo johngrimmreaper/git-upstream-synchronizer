@@ -59,6 +59,12 @@ The crash demo uses the production handler, a 15-second activation timeout, and
 then the normal replacement worker. Camunda records the timeout without consuming
 retries; the same job completes as `UP_TO_DATE` without another Git change.
 
+The two automated demonstrations share a local guard because they use the same
+job type with different temporary repository mappings. A competing run is refused
+before it can consume the other demo's jobs. Workers inherit the guard descriptor
+so it remains held if the launcher dies. Manual workers and other checkouts are
+outside this guard; workers polling the same job type need compatible mappings.
+
 Core tests send `SIGKILL` either to Python alone or to its isolated process group,
 while Git is blocked during fetch or in a post-merge hook after the fast-forward.
 If only Python dies, the surviving Git child retains the inherited lock descriptor

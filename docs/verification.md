@@ -151,6 +151,35 @@ and completing as `UP_TO_DATE`; evidence is
 timeout because a competing demonstration worker had already completed the job;
 the repeat ran without another worker.
 
+## Automated demonstration coordination — 2026-10-26
+
+Both automated Camunda scripts now acquire the same nonblocking local guard
+before deploying or launching a worker. Their workers inherit the descriptor.
+The guard is released when the last holder exits; the remaining file is harmless.
+This prevents competing temporary repository mappings within one checkout.
+The core, standalone CLI, production worker, and BPMN model are unchanged.
+The full suite passed with **53 tests** through the `pytest` entry point.
+Without the optional SDK, **36 tests passed and 2 checks skipped**: the worker
+test module and the crash-demo entry-point check.
+
+Five tests use temporary script copies and directories. They verify rejection by
+both entry points, reuse after a completed run, inheritance by a surviving child,
+and standalone operation while the Camunda guard is held. They do not contact
+Camunda or modify real repositories.
+
+The live check started the crash demonstration, confirmed the guard was held,
+and launched the normal demonstration concurrently. The second run exited with
+code 1 and the busy message, before deployment or worker startup. The original
+crash demonstration then completed: process `2251799813742078`, job
+`2251799813742084`, `UP_TO_DATE`, and all three retries preserved. Its report is
+`/tmp/git-sync-demo-qkrm_z9q/report.json`.
+
+A subsequent normal demonstration passed all business outcomes, retry recovery,
+exhausted retries, and the Git-lock incident. Its report is
+`/tmp/git-sync-demo-h0y0extl/report.json`. The guard only coordinates automated
+runs from this checkout. Manual workers, other checkouts, and other machines
+still need compatible repository mappings and explicit coordination.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real

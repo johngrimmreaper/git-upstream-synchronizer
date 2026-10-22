@@ -1,6 +1,8 @@
 """Reproduce Git outcomes using newly created local repositories only."""
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -10,6 +12,22 @@ import tempfile
 import time
 
 PROJECT = Path(__file__).resolve().parents[1]
+
+
+@contextmanager
+def camunda_demo_lock():
+    """Serialize automated Camunda demos; workers inherit the held descriptor."""
+    lock_path = PROJECT / "infra" / "camunda" / "demonstration.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(
+                "Another Camunda demonstration is running from this checkout; "
+                "wait for it to finish. Do not delete demonstration.lock."
+            ) from None
+        yield lock.fileno()
 
 
 def git(repo: Path, *args: str) -> str:
@@ -86,7 +104,7 @@ def wait_for(check, description: str, seconds: int = 90):
     raise TimeoutError(f"Timed out waiting for {description}")
 
 
-def run_camunda(root: Path) -> dict:
+def run_camunda(root: Path, lock_fd: int) -> dict:
     # The optional SDK is imported only for this demonstration backend.
     import camunda_orchestration_sdk as sdk
     environment = {**os.environ, "CAMUNDA_REST_ADDRESS": os.environ.get(
@@ -98,7 +116,8 @@ def run_camunda(root: Path) -> dict:
         client.deploy_resources_from_files([PROJECT / "bpmn/synchronize-repository.bpmn"])
         with (root / "worker.log").open("w") as log:
             worker = subprocess.Popen([sys.executable, "-m", "git_upstream_synchronizer.camunda_worker",
-                "--repositories", str(root / "repos.json")], env=environment, stdout=log, stderr=log)
+                "--repositories", str(root / "repos.json")], env=environment, stdout=log, stderr=log,
+                pass_fds=(lock_fd,))
             try:
                 def start(repository_id):
                     result = client.create_process_instance(data=sdk.ProcessCreationById(
@@ -216,7 +235,8 @@ def main():
         print(f"Worker configuration: {root / 'repos.json'}")
         return
     if args.camunda:
-        report = run_camunda(root)
+        with camunda_demo_lock() as lock_fd:
+            report = run_camunda(root, lock_fd)
     else:
         def invoke(repository_id):
             result = subprocess.run([sys.executable, "-m", "git_upstream_synchronizer.cli",

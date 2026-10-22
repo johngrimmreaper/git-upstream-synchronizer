@@ -11,7 +11,7 @@ import sys
 
 import camunda_orchestration_sdk as sdk
 
-from demo import PROJECT, git, prepare, wait_for
+from demo import PROJECT, camunda_demo_lock, git, prepare, wait_for
 from git_upstream_synchronizer.camunda_worker import JOB_TYPE, handle_job, load_repositories
 
 CRASH_EXIT_CODE = 23
@@ -51,7 +51,7 @@ def stop(process: subprocess.Popen) -> None:
             process.wait(timeout=5)
 
 
-def demonstrate(root: Path) -> dict:
+def demonstrate(root: Path, lock_fd: int) -> dict:
     fork = root / "fork"
     before = git(fork, "rev-parse", "HEAD")
     upstream = git(root / "seed", "rev-parse", "HEAD")
@@ -66,7 +66,7 @@ def demonstrate(root: Path) -> dict:
         try:
             with (root / "crash-worker.log").open("w") as log:
                 worker = subprocess.Popen([sys.executable, str(Path(__file__).resolve()),
-                    "--crash-worker", str(root)], stdout=log, stderr=log)
+                    "--crash-worker", str(root)], stdout=log, stderr=log, pass_fds=(lock_fd,))
                 children.append(worker)
                 assert worker.wait(timeout=40) == CRASH_EXIT_CODE, "Fault worker did not exit as expected"
             receipt = json.loads((root / "before-crash.json").read_text())
@@ -100,7 +100,7 @@ def demonstrate(root: Path) -> dict:
             with (root / "recovery-worker.log").open("w") as log:
                 replacement = subprocess.Popen([sys.executable, "-m",
                     "git_upstream_synchronizer.camunda_worker", "--repositories", str(root / "repos.json")],
-                    stdout=log, stderr=log)
+                    stdout=log, stderr=log, pass_fds=(lock_fd,))
                 children.append(replacement)
 
                 def completed():
@@ -161,7 +161,8 @@ def main():
         return
     root = prepare(args.directory)
     print(f"Demo directory: {root}", flush=True)
-    demonstrate(root)
+    with camunda_demo_lock() as lock_fd:
+        demonstrate(root, lock_fd)
     print(f"Evidence saved: {root / 'report.json'}", flush=True)
 
 

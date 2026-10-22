@@ -147,6 +147,15 @@ With the runtime running, from the project root:
 Stop any manual demo worker before running the automated demonstration: all workers
 for this job type must agree on the repository-ID mapping.
 
+The two automated Camunda demonstrations share a nonblocking local guard at
+`infra/camunda/demonstration.lock`. A second run from this checkout exits with a
+clear message before deploying or starting a worker. Workers inherit the held
+descriptor, so a surviving worker keeps the guard if its launcher dies. Once all
+holders exit, another run can start even though the file remains. Do not delete
+the file to bypass a running demo. This guard covers one checkout; manual workers,
+other checkouts, and other machines still require coordination. The standalone
+demonstration and `--prepare` mode remain available while a Camunda demo runs.
+
 Each run creates new repositories under a printed `/tmp/git-sync-demo-*` directory.
 It deploys the BPMN file, launches a separate Python worker, starts process instances,
 and asserts the following observable effects:
@@ -304,11 +313,13 @@ Core and CLI tests use temporary local repositories and work without the SDK;
 worker tests automatically skip unless the optional SDK is installed. With
 `.[dev,camunda]` installed, all adapter tests run without contacting a server.
 The end-to-end demonstration is explicit and separate from ordinary pytest runs.
-The focused crash tests require neither Camunda nor its SDK:
+The focused safety checks run without a server. Core crash tests need no SDK;
+the demo guard suite skips its crash-script entry-point check when the SDK is absent:
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_safety.py -k killed_sync
 .venv/bin/python -m pytest -q tests/test_interrupted_checkout.py
+.venv/bin/python -m pytest -q tests/test_demo_lock.py
 ```
 
 See [verification evidence](docs/verification.md) for what was actually tested,
