@@ -180,6 +180,33 @@ exhausted retries, and the Git-lock incident. Its report is
 runs from this checkout. Manual workers, other checkouts, and other machines
 still need compatible repository mappings and explicit coordination.
 
+## Operator recovery of the same job — 2026-10-26
+
+The normal Camunda demonstration now resumes its Git-lock incident after fixing
+the synthetic cause. It uses the pinned SDK to update the job's remaining retries
+to three, then resolves the incident. The existing completion/end-event checks
+also cover the resumed process. Live assertions verify job identity, process
+identity, resolved incident state, remaining retries, and unchanged Git HEAD.
+
+| Check | Observed result |
+| --- | --- |
+| Process before and after recovery | `2251799813743361` |
+| Job before and after recovery | `2251799813743367` |
+| Incident | `2251799813743369`; changed from `ACTIVE` to `RESOLVED` |
+| Retry allowance | Explicitly restored from 0 to 3; remained 3 after completion |
+| Completion | `UP_TO_DATE`; `EndUpToDate` reached in the original process |
+| Git | HEAD unchanged during incident recovery |
+
+All existing demonstration scenarios passed. The persistent-fetch incident
+`2251799813743358` remains active for inspection. Evidence is saved in
+`/tmp/git-sync-demo-c31l11co/report.json` and `worker.log` in that directory.
+This was API-driven verification; the Operate GUI recovery action was not exercised.
+
+The full suite passed with **53 tests**. Without the SDK, **36 tests passed and
+2 checks skipped**. New recovery assertions run in the explicit live
+demonstration; ordinary pytest remains independent of a Camunda server.
+The recovery procedure is confined to the Camunda demonstration.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real

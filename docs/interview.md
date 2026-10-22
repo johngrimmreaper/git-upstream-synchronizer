@@ -46,6 +46,14 @@ at three; the third failed attempt produces an incident. Unsafe preconditions ra
 Unexpected exceptions are not swallowed: the SDK fails the job with its default
 retry behavior. These cases are covered by focused adapter tests.
 
+The Git-lock demonstration also verifies operator recovery through the SDK.
+After removing its own synthetic lock, it restores the same job's retries to
+three, then resolves the incident. The original process and job complete as
+`UP_TO_DATE`, the incident is `RESOLVED`, and HEAD is unchanged. This follows the
+[documented recovery order](https://docs.camunda.io/docs/8.9/components/concepts/incidents/#resolving-a-job-related-incident).
+Increasing retries is an explicit operator action; automatic worker failures
+continue to decrement the existing count.
+
 A dead worker cannot acknowledge completion. After the ten-minute activation
 timeout Camunda can deliver the job again without reducing retries merely because
 of the timeout. If Git was already updated, the repeat call returns `UP_TO_DATE`.

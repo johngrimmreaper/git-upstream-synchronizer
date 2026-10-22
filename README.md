@@ -169,12 +169,16 @@ and asserts the following observable effects:
    incident; no result status is falsely returned and HEAD remains unchanged.
 6. Git write lock: an isolated `index.lock` causes an immediate zero-retry incident.
    HEAD and the lock contents are preserved. After removing its own synthetic
-   fixture, the demonstration starts a new instance that completes as `UP_TO_DATE`.
+   fixture, the demonstration restores three retries and resolves the incident.
+   The same process and job complete as `UP_TO_DATE` at `EndUpToDate`; the incident
+   becomes `RESOLVED` and HEAD remains unchanged.
 
 The script checks the three named BPMN end events through the API. `worker.log`
 and `report.json` remain in the printed directory for inspection. Its worker stops
-on completion; the incidents remain visible in Operate. Git fixture commits
-are intentionally unsigned and isolated; implementation commits are signed.
+on completion. The persistent-fetch incident remains active in Operate; the
+Git-lock incident is resolved. The report records the process, job, and incident
+keys before and after recovery. Git fixture commits are intentionally unsigned
+and isolated; implementation commits are signed.
 
 The standalone demonstration needs no Camunda SDK:
 
@@ -278,6 +282,13 @@ The BPMN task starts with three retries: this permits three failed attempts in t
 Zero retries creates an incident. Operators inspect the error, fix the cause, restart
 the worker if needed, and retry/resolve the incident in Operate. Retrying unchanged
 bad credentials or a permanently missing remote cannot fix the underlying problem.
+
+For a job incident, follow the [official recovery sequence](https://docs.camunda.io/docs/8.9/components/concepts/incidents/#resolving-a-job-related-incident):
+fix the cause, increase the job's remaining retries, then resolve the incident.
+The demonstration uses SDK `update_job` with `JobChangeset(retries=3)`, followed by
+`resolve_incident`. These are explicit operator actions in the demo; the worker's
+automatic retry policy still decrements the current count. Recovery resumes the
+existing process and job.
 
 `SyncError` identifies unsafe input/state, such as a dirty checkout, a Git write
 lock, or an unknown repository ID. The worker fails that job with zero retries

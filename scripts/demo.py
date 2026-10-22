@@ -141,8 +141,7 @@ def run_camunda(root: Path, lock_fd: int) -> dict:
                         filter_=sdk.ProcessInstanceSearchQueryFilter(process_instance_key=key)))
                     return result.items and result.items[0].state.value == "COMPLETED"
 
-                def invoke(repository_id):
-                    key = start(repository_id)
+                def completed_result(key):
                     wait_for(lambda: completed(key), f"process {key} completion")
                     result = wait_for(lambda: result_variables(key), "result variables")
                     expected_end = {"UPDATED": "EndUpdated", "UP_TO_DATE": "EndUpToDate",
@@ -153,6 +152,9 @@ def run_camunda(root: Path, lock_fd: int) -> dict:
                                 element_id=expected_end))).items
                     wait_for(end_reached, expected_end)
                     return {**result, "process_instance_key": str(key), "end_event": expected_end}
+
+                def invoke(repository_id):
+                    return completed_result(start(repository_id))
 
                 results = exercise(root, invoke)
                 fork = root / "failure-fork"
@@ -175,10 +177,10 @@ def run_camunda(root: Path, lock_fd: int) -> dict:
                 print(f"Automatic retry recovered: process={key}, status={recovered['status']}", flush=True)
                 git(fork, "remote", "set-url", "upstream", unavailable)
                 incident_key = start("failure")
-                def incident(process_key):
+                def incident(process_key, state="ACTIVE"):
                     items = client.search_incidents(data=sdk.IncidentSearchQuery(
                         filter_=sdk.IncidentSearchQueryFilter(process_instance_key=process_key))).items
-                    return next((i for i in items if i.state.value == "ACTIVE"), None)
+                    return next((i for i in items if i.state.value == state), None)
                 active = wait_for(lambda: incident(incident_key), "incident after exhausted retries")
                 jobs = client.search_jobs(data=sdk.JobSearchQuery(
                     filter_=sdk.JobSearchQueryFilter(process_instance_key=incident_key))).items
@@ -206,13 +208,37 @@ def run_camunda(root: Path, lock_fd: int) -> dict:
                     # Only the demo removes the synthetic lock it created.
                     if lock.exists() and lock.read_bytes() == lock_content:
                         lock.unlink()
-                repaired = invoke("failure")
+                # Operator recovery: fix the cause, restore retries, resolve the incident.
+                locked_job_key = blocked_jobs[0].job_key
+                client.update_job(locked_job_key, data=sdk.JobUpdateRequest(
+                    changeset=sdk.JobChangeset(retries=3)))
+                client.resolve_incident(blocked.incident_key)
+                repaired = completed_result(blocked_key)
                 assert repaired["status"] == "UP_TO_DATE"
-                print("After fixture cleanup: new process completed as UP_TO_DATE", flush=True)
+                assert repaired["previous_sha"] == repaired["current_sha"] == recovered["current_sha"]
+                assert git(fork, "rev-parse", "HEAD") == recovered["current_sha"]
+
+                def completed_recovery_job():
+                    items = client.search_jobs(data=sdk.JobSearchQuery(
+                        filter_=sdk.JobSearchQueryFilter(process_instance_key=blocked_key))).items
+                    return items[0] if len(items) == 1 and items[0].state.value == "COMPLETED" else None
+
+                resumed = wait_for(completed_recovery_job, "same job completion after incident resolution")
+                assert str(resumed.job_key) == str(locked_job_key)
+                assert str(resumed.process_instance_key) == str(blocked_key)
+                assert resumed.retries == 3
+                resolved = wait_for(lambda: incident(blocked_key, "RESOLVED"), "Git lock incident resolution")
+                assert str(resolved.incident_key) == str(blocked.incident_key)
+                assert incident(blocked_key) is None
+                repaired.update(job_key=str(resumed.job_key), remaining_retries=resumed.retries)
+                print(f"Resolved Git lock incident: process={blocked_key}, job={locked_job_key}, "
+                      "status=UP_TO_DATE, HEAD unchanged", flush=True)
                 return {"results": results, "retry_recovered_process": str(key),
                         "incident_process": str(incident_key), "incident_key": str(active.incident_key),
                         "git_lock_incident_process": str(blocked_key),
                         "git_lock_incident_key": str(blocked.incident_key),
+                        "git_lock_job_key": str(locked_job_key),
+                        "git_lock_incident_state": resolved.state.value,
                         "git_lock_recovery": repaired, "process_instance_keys": keys}
             finally:
                 worker.terminate()
