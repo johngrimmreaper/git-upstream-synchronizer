@@ -1,5 +1,43 @@
 # Architecture and design rationale
 
+## Ten-minute rehearsal
+
+Complete the README installation/startup steps before the meeting and run the
+tests. Stop manual workers for the demonstration job type. Preview the BPMN model
+in Desktop Modeler and locate a recent instance in Operate; GUI interaction still
+needs a manual rehearsal.
+
+| Time | Show | Explain |
+| --- | --- | --- |
+| 0–2 minutes | Architecture diagram and `SyncResult` | Python calls Git; the core accepts ordinary values and has two thin adapters. |
+| 2–3 minutes | Standalone demonstration | The three Git outcomes work independently of Camunda. |
+| 3–5 minutes | BPMN model and worker `handle_job` | One Service Task keeps one repository operation together; the gateway routes business results. |
+| 5–8 minutes | Camunda demonstration output and its new process keys | Show changed HEAD/file, idempotency, divergence, retry exhaustion, and recovery of the same job. |
+| 8–10 minutes | Five answers below and the code walkthrough | Explain cron versus orchestration, at-least-once delivery, deployment/licensing costs, and tested limits. |
+
+From the project root, run these commands sequentially:
+
+```bash
+.venv/bin/python scripts/demo.py
+.venv/bin/python scripts/demo.py --camunda
+```
+
+For a live SDK-absence proof, use a separate core-only installation for the first
+command, installed without the Camunda extra. The fresh-wheel acceptance check
+in [verification](verification.md) records that independent installation.
+Use the printed process key to find the current instance in Operate; earlier
+demonstration incidents can remain visible.
+
+If asked about an unexpected worker exit, run:
+
+```bash
+.venv/bin/python scripts/demo_crash_recovery.py
+```
+
+Point out the same job key, unchanged HEAD after redelivery, and all three retries
+remaining. Read `sync.py` first, then the CLI, `handle_job`, and the BPMN conditions.
+Keep claims within the [verified scope](verification.md#limits-of-this-evidence).
+
 ## 1. Why Python and an external process worker?
 
 Python keeps the synchronization code short and readable. The installed Git CLI

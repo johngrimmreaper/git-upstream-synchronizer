@@ -268,6 +268,40 @@ Cancellation is best effort. An unavailable API, an abrupt launcher kill, or los
 of the creation response can still leave an instance requiring operator action.
 Git fixture directories and successful-run incident evidence are retained.
 
+## Acceptance review for the interview exercise — 2026-10-26
+
+The original technical demonstration requirements are covered by the checks below.
+The rehearsal section in [interview notes](interview.md#ten-minute-rehearsal) provides
+a suggested presentation order. Application code and dependency versions were
+unchanged during this review.
+
+| Requirement | Verified evidence |
+| --- | --- |
+| Independent engine and CLI | An offline-built wheel was installed without dependencies into a fresh virtual environment; the Camunda SDK was absent. |
+| Observable Git effects and idempotency | The installed `git-upstream-sync` console entry point passed `UPDATED`, `UP_TO_DATE`, and `NEEDS_REVIEW` using isolated repositories. |
+| Real BPMN Service Task and shared core | Both live demonstrations passed with the normal worker; the task type matches `JOB_TYPE` and the model declares three retries. |
+| Technical failures and recovery | The live run verified retries, an exhausted-retry incident, Git-lock refusal, operator recovery, and crash redelivery. |
+| Automated checks | Full suite: 67 passed. Without SDK: 44 passed, 3 skipped. |
+| Explainability and portability | The five interview answers and code walkthrough are documented; an import audit found no Camunda, Docker, or BPMN imports in the core/CLI. |
+| Signed source history | All 11 implementation commits after the signed foundation through `6c8a830` verified with the expected signing key. |
+| Local runtime | Topology reported 8.9.26; HTTP, gRPC, broker, Connectors, and management listeners were restricted to loopback. |
+
+The wheel build used the existing system Python build tools. Installation used
+`--no-index --no-deps`; the console-entry-point checks ran outside the source
+checkout with `PYTHONPATH` removed. The imported module came from the fresh
+environment's `site-packages`. The acceptance report is
+`/tmp/git-sync-acceptance-hlt3gt8_/report.json`.
+
+The normal demonstration report is `/tmp/git-sync-demo-f_ylio6v/report.json`.
+Crash redelivery evidence is `/tmp/git-sync-demo-mg1hiehr/report.json`: the same job
+completed as `UP_TO_DATE`, HEAD stayed unchanged, and all three retries remained.
+The BPMN audit also checked its three named outcomes and absence of a default
+gateway route. No public hosting or additional backend was introduced.
+
+The next preparation step is a timed code explanation and manual GUI rehearsal.
+Operate and Desktop Modeler interaction remain outside the automated evidence;
+the existing production and fault-testing limits below still apply.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real

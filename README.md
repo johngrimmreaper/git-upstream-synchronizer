@@ -357,8 +357,10 @@ is absent:
 .venv/bin/python -m pytest -q tests/test_demo_cleanup.py
 ```
 
-See [verification evidence](docs/verification.md) for what was actually tested,
-and [architecture and design rationale](docs/interview.md) for the five interview questions.
+See [verification evidence](docs/verification.md) for what was actually tested.
+The [ten-minute rehearsal](docs/interview.md#ten-minute-rehearsal) gives a presentation
+order; [architecture and design rationale](docs/interview.md) answers the five
+interview questions.
 
 ## Trade-offs and production considerations
 
