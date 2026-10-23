@@ -8,6 +8,16 @@ import subprocess
 from typing import Literal
 
 
+# Known repository-local names from git rev-parse --local-env-vars.
+_LOCAL_GIT_ENV = frozenset({
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+    "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+})
+
+
 class SyncError(RuntimeError):
     """Precondition failure requiring operator intervention."""
 
@@ -51,8 +61,12 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
     upstream remote. Divergent histories are reported, never merged or overwritten.
     Recognized Git write locks require operator inspection before fetching; the
     synchronizer never removes them or attempts to repair damaged checkout state.
+    Repository-local Git environment overrides must be unset.
     This intentionally does not push the result to a hosting service.
     """
+    overrides = sorted(_LOCAL_GIT_ENV.intersection(os.environ))
+    if overrides:
+        raise SyncError("Unset repository-local Git environment variables: " + ", ".join(overrides))
     try:
         path = Path(repo).resolve(strict=True)
     except OSError as error:

@@ -72,6 +72,15 @@ Before fetching, it also refuses Git's index, HEAD, selected-branch, and packed-
 lock files. A Git lock can indicate an active command or an interrupted write;
 the tool preserves it and requires operator inspection.
 
+Recognized repository-local Git environment overrides must be unset. Examples
+include `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, `GIT_INDEX_FILE`, object/shallow
+storage overrides, and runtime configuration overrides such as `GIT_CONFIG_COUNT`
+or `GIT_CONFIG_PARAMETERS`. These can redirect Git despite the selected path.
+The core raises `SyncError` before invoking Git and lists variable names without
+their values. Unset the named variables before retrying; restart a worker with
+the corrected environment. SSH settings and global/system configuration-selection
+variables remain supported. See [Git's hook environment guidance](https://git-scm.com/docs/githooks#_description).
+
 A nonblocking Linux advisory lock covers the operation. The held descriptor is
 passed explicitly to `git fetch` and `git merge`, so a surviving Git child retains
 the lock if Python is killed. Another synchronization refuses to start until the
@@ -331,6 +340,7 @@ the demo guard suite skips its crash-script entry-point check when the SDK is ab
 .venv/bin/python -m pytest -q tests/test_safety.py -k killed_sync
 .venv/bin/python -m pytest -q tests/test_interrupted_checkout.py
 .venv/bin/python -m pytest -q tests/test_demo_lock.py
+.venv/bin/python -m pytest -q tests/test_git_environment.py
 ```
 
 See [verification evidence](docs/verification.md) for what was actually tested,

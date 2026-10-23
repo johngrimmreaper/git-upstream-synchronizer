@@ -207,6 +207,33 @@ The full suite passed with **53 tests**. Without the SDK, **36 tests passed and
 demonstration; ordinary pytest remains independent of a Camunda server.
 The recovery procedure is confined to the Camunda demonstration.
 
+## Repository-local Git environment protection — 2026-10-26
+
+A CLI run against two disposable checkouts reproduced a targeting defect.
+With `GIT_DIR` and `GIT_WORK_TREE` pointing to the other checkout, the old core
+returned `UPDATED` while the requested repository's HEAD stayed unchanged and
+the other repository's HEAD advanced. The new CLI regression failed against
+that implementation before the fix.
+
+The core now rejects known repository-local Git overrides before invoking Git.
+The error reports names without values. Nine new checks cover six environment
+contexts, the real CLI, ordinary Git settings, and the Camunda adapter. They verify
+preservation of both checkout states and external metadata, refusal before locking
+or fetching, CLI error JSON, and a zero-retry worker failure. Global/system
+configuration selection and SSH settings remain supported.
+
+The full suite passed with **62 tests**. Without the optional SDK, **44 tests
+passed and 2 checks skipped**. All repositories used by regressions were temporary.
+
+Both live Camunda demonstrations passed after the core change. The normal demo
+verified business outcomes, automatic retries, incidents, and recovery of the
+original job; evidence is `/tmp/git-sync-demo-c0xyolrt/report.json`. Crash redelivery
+completed as `UP_TO_DATE` with three retries intact; evidence is
+`/tmp/git-sync-demo-0pxv3w_b/report.json`.
+
+This precondition prevents inherited repository context from changing the selected
+target. Git configuration and hooks remain trusted; this is not a sandbox.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real

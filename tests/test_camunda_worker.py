@@ -90,3 +90,17 @@ def test_git_write_lock_creates_incident_without_retry(repositories):
     assert "Git lock file: index.lock" in caught.value.message
     assert lock.read_bytes() == b"unfinished write\n"
     assert git(fork, "rev-parse", "HEAD") == before
+
+
+def test_repository_environment_override_needs_operator_attention(repositories, monkeypatch):
+    _, fork = repositories
+    before = git(fork, "rev-parse", "HEAD")
+    with monkeypatch.context() as context:
+        context.setenv("GIT_DIR", str(fork / ".git"))
+        with pytest.raises(sdk.JobFailure) as caught:
+            worker.handle_job(job(), {"demo": {"path": str(fork)}})
+    assert caught.value.retries == 0
+    assert "GIT_DIR" in caught.value.message
+    assert str(fork) not in caught.value.message
+    assert git(fork, "rev-parse", "HEAD") == before
+    assert not (fork / ".git" / "upstream-synchronizer.lock").exists()

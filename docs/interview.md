@@ -46,6 +46,14 @@ at three; the third failed attempt produces an incident. Unsafe preconditions ra
 Unexpected exceptions are not swallowed: the SDK fails the job with its default
 retry behavior. These cases are covered by focused adapter tests.
 
+The core also rejects recognized repository-local Git environment overrides before
+invoking Git. An isolated regression reproduced `GIT_DIR` and `GIT_WORK_TREE`
+redirecting a successful update to another checkout despite `git -C`. Explicit
+rejection keeps the requested repository unambiguous and reports only variable
+names. The CLI exits with an error; the worker requests zero retries so its launch
+environment can be corrected. Ordinary SSH and global configuration settings
+remain available. Repository configuration and hooks still need to be trusted.
+
 The Git-lock demonstration also verifies operator recovery through the SDK.
 After removing its own synthetic lock, it restores the same job's retries to
 three, then resolves the incident. The original process and job complete as
