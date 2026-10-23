@@ -234,6 +234,40 @@ completed as `UP_TO_DATE` with three retries intact; evidence is
 This precondition prevents inherited repository context from changing the selected
 target. Git configuration and hooks remain trusted; this is not a sandbox.
 
+## Cleanup after unsuccessful demonstration verification — 2026-10-26
+
+A controlled verification failure reproduced an active instance left behind by
+the normal demo. Its worker launch was suppressed, a real Camunda instance was
+created, and verification raised an injected error. The original implementation
+left instance `2251799813746259` in `ACTIVE`; the verification harness subsequently
+canceled that isolated instance.
+
+The normal demo now records verification success, stops its worker, and attempts
+to cancel only its recorded instance keys when verification fails. Both demo
+scripts share the cancellation helper. It sends an explicit empty SDK request,
+tolerates already-finished instances, and reports other API failures by key while
+preserving the original verification error.
+
+Five new tests cover verification errors, `KeyboardInterrupt`, cleanup API errors,
+already-finished instances, and continued cleanup after an API failure. The full
+suite passed with **67 tests**. Without the SDK, **44 tests passed and 3 checks
+skipped**.
+
+A repeat of the controlled live check created instance `2251799813746597`.
+Cleanup changed its API state to `TERMINATED`; the original error and Git HEAD
+were preserved. The worker launch was suppressed for this cancellation drill.
+Evidence is `/tmp/git-sync-cleanup-check-s_mg2xb6/cleanup-report.json`.
+
+Both full demonstrations then passed with real workers. The normal report is
+`/tmp/git-sync-cleanup-check-s_mg2xb6/success/report.json`; a separate API check
+confirmed its intentional incident `2251799813746704` remained active after worker
+shutdown. Crash redelivery passed with all three retries intact; its report is
+`/tmp/git-sync-demo-dms3fftt/report.json`.
+
+Cancellation is best effort. An unavailable API, an abrupt launcher kill, or loss
+of the creation response can still leave an instance requiring operator action.
+Git fixture directories and successful-run incident evidence are retained.
+
 ## Limits of this evidence
 
 A missing local remote simulates a temporary fetch failure; this was not a real

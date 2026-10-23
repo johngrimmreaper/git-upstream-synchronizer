@@ -11,7 +11,7 @@ import sys
 
 import camunda_orchestration_sdk as sdk
 
-from demo import PROJECT, camunda_demo_lock, git, prepare, wait_for
+from demo import PROJECT, camunda_demo_lock, cancel_demo_instances, git, prepare, wait_for
 from git_upstream_synchronizer.camunda_worker import JOB_TYPE, handle_job, load_repositories
 
 CRASH_EXIT_CODE = 23
@@ -142,11 +142,7 @@ def demonstrate(root: Path, lock_fd: int) -> dict:
             for child in children:
                 stop(child)
             if not finished:
-                try:
-                    client.cancel_process_instance(key, data=sdk.CancelProcessInstanceData(
-                        operation_reference=int(key)))
-                except Exception:
-                    print(f"Could not cancel demo process {key}; inspect it in Operate", file=sys.stderr)
+                cancel_demo_instances(client, [key])
 
 
 def main():

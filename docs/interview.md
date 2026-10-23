@@ -81,6 +81,14 @@ before it can consume the other demo's jobs. Workers inherit the guard descripto
 so it remains held if the launcher dies. Manual workers and other checkouts are
 outside this guard; workers polling the same job type need compatible mappings.
 
+The normal demo records the instance keys it creates. If verification fails, it
+stops the worker and attempts to cancel those instances. Both demo scripts share
+the cancellation helper, which tolerates already-finished instances and reports
+API cleanup failures by key. The original verification error propagates. Successful
+runs retain their intended incident evidence, and Git fixtures remain available.
+This cleanup requires the launcher and Camunda API to be available; abrupt process
+termination or a lost creation response still requires operator inspection.
+
 Core tests send `SIGKILL` either to Python alone or to its isolated process group,
 while Git is blocked during fetch or in a post-merge hook after the fast-forward.
 If only Python dies, the surviving Git child retains the inherited lock descriptor

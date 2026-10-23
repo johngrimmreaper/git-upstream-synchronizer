@@ -104,6 +104,21 @@ def wait_for(check, description: str, seconds: int = 90):
     raise TimeoutError(f"Timed out waiting for {description}")
 
 
+def cancel_demo_instances(client, keys) -> None:
+    """Best-effort cancellation of instances created by an unsuccessful demo."""
+    from camunda_orchestration_sdk import CancelProcessInstanceData
+    from camunda_orchestration_sdk.errors import NotFoundError
+
+    for key in keys:
+        try:
+            client.cancel_process_instance(key, data=CancelProcessInstanceData())
+        except NotFoundError:
+            pass  # The instance has already finished or been canceled.
+        except Exception as error:
+            print(f"Could not cancel demo process {key}; inspect it in Operate "
+                  f"({type(error).__name__})", file=sys.stderr)
+
+
 def run_camunda(root: Path, lock_fd: int) -> dict:
     # The optional SDK is imported only for this demonstration backend.
     import camunda_orchestration_sdk as sdk
@@ -118,6 +133,7 @@ def run_camunda(root: Path, lock_fd: int) -> dict:
             worker = subprocess.Popen([sys.executable, "-m", "git_upstream_synchronizer.camunda_worker",
                 "--repositories", str(root / "repos.json")], env=environment, stdout=log, stderr=log,
                 pass_fds=(lock_fd,))
+            verified = False
             try:
                 def start(repository_id):
                     result = client.create_process_instance(data=sdk.ProcessCreationById(
@@ -233,20 +249,26 @@ def run_camunda(root: Path, lock_fd: int) -> dict:
                 repaired.update(job_key=str(resumed.job_key), remaining_retries=resumed.retries)
                 print(f"Resolved Git lock incident: process={blocked_key}, job={locked_job_key}, "
                       "status=UP_TO_DATE, HEAD unchanged", flush=True)
-                return {"results": results, "retry_recovered_process": str(key),
+                report = {"results": results, "retry_recovered_process": str(key),
                         "incident_process": str(incident_key), "incident_key": str(active.incident_key),
                         "git_lock_incident_process": str(blocked_key),
                         "git_lock_incident_key": str(blocked.incident_key),
                         "git_lock_job_key": str(locked_job_key),
                         "git_lock_incident_state": resolved.state.value,
                         "git_lock_recovery": repaired, "process_instance_keys": keys}
+                verified = True
+                return report
             finally:
-                worker.terminate()
                 try:
-                    worker.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    worker.kill()
-                    worker.wait(timeout=5)
+                    worker.terminate()
+                    try:
+                        worker.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        worker.kill()
+                        worker.wait(timeout=5)
+                finally:
+                    if not verified:
+                        cancel_demo_instances(client, keys)
 
 
 def main():

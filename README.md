@@ -189,6 +189,18 @@ Git-lock incident is resolved. The report records the process, job, and incident
 keys before and after recovery. Git fixture commits are intentionally unsigned
 and isolated; implementation commits are signed.
 
+If verification raises an error or `KeyboardInterrupt`, the normal demonstration
+stops its worker and attempts to cancel only the process instances it created.
+The crash demonstration uses the same cancellation helper for its own instance.
+Already-finished instances are tolerated. API cleanup failures print the affected
+key for inspection in Operate, while the original verification error propagates.
+Successful runs retain their intended incident evidence. Temporary Git fixtures
+remain available for inspection.
+
+Cleanup is best effort: `SIGKILL`, loss of the creation response, or an unavailable
+Camunda API can leave an instance requiring operator attention. Inspect reported
+keys and unfinished demo instances before starting another worker.
+
 The standalone demonstration needs no Camunda SDK:
 
 ```bash
@@ -333,14 +345,16 @@ Core and CLI tests use temporary local repositories and work without the SDK;
 worker tests automatically skip unless the optional SDK is installed. With
 `.[dev,camunda]` installed, all adapter tests run without contacting a server.
 The end-to-end demonstration is explicit and separate from ordinary pytest runs.
-The focused safety checks run without a server. Core crash tests need no SDK;
-the demo guard suite skips its crash-script entry-point check when the SDK is absent:
+The focused checks run without a server. Core crash/environment checks need no SDK.
+Demo cleanup tests and the guard's crash-script entry-point check skip when the SDK
+is absent:
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_safety.py -k killed_sync
 .venv/bin/python -m pytest -q tests/test_interrupted_checkout.py
 .venv/bin/python -m pytest -q tests/test_demo_lock.py
 .venv/bin/python -m pytest -q tests/test_git_environment.py
+.venv/bin/python -m pytest -q tests/test_demo_cleanup.py
 ```
 
 See [verification evidence](docs/verification.md) for what was actually tested,
