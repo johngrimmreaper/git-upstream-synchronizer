@@ -1,0 +1,83 @@
+:root { color-scheme: light; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1f2328; background: #fff; --border: #d1d9e0; --muted: #59636e; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+button, select { font: inherit; }
+button, select { border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px;
+  color: inherit; background: #f6f8fa; }
+button { font-weight: 600; cursor: pointer; white-space: nowrap; }
+button:hover:enabled { background: #eff2f5; border-color: #a0a7af; }
+button:disabled { cursor: default; opacity: .55; }
+button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #0969da; outline-offset: 3px; }
+select { min-width: 220px; background: #fff; }
+code, pre { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 12px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 24px; font-weight: 600; }
+h2 { font-size: 16px; font-weight: 600; }
+h3 { font-size: 14px; font-weight: 600; }
+.topbar { background: #f6f8fa; border-bottom: 1px solid var(--border); }
+.topbar-inner { max-width: 1200px; padding: 18px 28px; margin: auto; display: flex; align-items: center; gap: 12px; }
+.mark { background: #1f2328; color: white; width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 25px; line-height: 1; }
+.badge { border: 1px solid var(--border); border-radius: 20px; color: var(--muted); font-size: 12px; padding: 1px 8px; }
+main { max-width: 1200px; margin: 0 auto; padding: 30px 28px; }
+.page-heading { margin-bottom: 24px; }
+.page-heading p { color: var(--muted); margin-top: 5px; }
+.repository-bar { background: #f6f8fa; border: 1px solid var(--border); border-radius: 6px;
+  padding: 16px; display: flex; gap: 20px; align-items: end; }
+.repository-bar label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; }
+.repository-bar code { align-self: center; padding-top: 17px; overflow-wrap: anywhere; }
+.repository-bar button { margin-left: auto; }
+#message { min-height: 26px; padding: 12px 0; color: var(--muted); overflow-wrap: anywhere; }
+#message.error { color: #cf222e; }
+#message.success { color: #1a7f37; }
+.banner { display: flex; gap: 24px; justify-content: space-between; align-items: center;
+  padding: 20px; border: 1px solid var(--border); border-radius: 6px; background: #f6f8fa; }
+.banner.ready, .banner.current { background: #f0fff4; border-color: #82c596; }
+.banner.review { background: #fff8e8; border-color: #d4a72c; }
+.banner p { margin-top: 4px; }
+.muted { color: var(--muted); font-size: 12px; }
+button.primary { background: #1f883d; border-color: #1a7f37; color: #fff; padding: 8px 16px; }
+button.primary:hover:enabled { background: #1a7f37; }
+.refs { display: flex; flex-wrap: wrap; gap: 24px; padding: 12px 0 24px; font-size: 12px; color: var(--muted); }
+.refs code { color: #1f2328; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); gap: 8px; }
+.tabs button { border: 0; border-radius: 0; padding: 10px 14px; background: transparent; font-weight: 400; }
+.tabs button[aria-selected="true"] { border-bottom: 2px solid #fd8c73; font-weight: 600; }
+.counter { background: #e8ecf0; border-radius: 20px; padding: 1px 7px; margin-left: 4px; font-size: 12px; }
+.section-note { padding: 16px 0; font-size: 12px; color: var(--muted); }
+.commit-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.panel { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; min-width: 0; }
+.panel h3 { background: #f6f8fa; border-bottom: 1px solid var(--border); padding: 12px 16px; }
+.commits { list-style: none; margin: 0; padding: 0; }
+.commits li { padding: 12px 16px; border-bottom: 1px solid #e8ecf0; overflow-wrap: anywhere; }
+.commits li:last-child { border: 0; }
+.commit-title { display: block; font-weight: 600; }
+.commit-meta { display: flex; gap: 8px; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.empty { color: var(--muted); padding: 18px; }
+.file { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+.file summary { display: flex; gap: 12px; align-items: center; cursor: pointer; background: #f6f8fa; padding: 12px 16px; }
+.file summary::before { content: "▸"; color: var(--muted); }
+.file[open] summary::before { content: "▾"; }
+.file summary code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.stats { margin-left: auto; white-space: nowrap; font: 12px ui-monospace, monospace; }
+.additions { color: #1a7f37; }
+.deletions { color: #cf222e; margin-left: 8px; }
+.patch { overflow-x: auto; margin: 0; padding: 8px 0; line-height: 1.6; border-top: 1px solid var(--border); }
+.diff-line { display: block; min-height: 1.6em; padding: 0 16px; white-space: pre; }
+.diff-line.added { background: #dafbe1; }
+.diff-line.removed { background: #ffebe9; }
+.diff-line.hunk { background: #ddf4ff; color: #0550ae; }
+.file-note { padding: 12px 16px; color: var(--muted); font-size: 12px; }
+footer { border-top: 1px solid var(--border); margin-top: 36px; padding-top: 16px; color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) {
+  main { padding: 24px 16px; }
+  .topbar-inner { padding: 16px; flex-wrap: wrap; }
+  .repository-bar { flex-wrap: wrap; align-items: center; gap: 12px; }
+  .repository-bar button { margin-left: 0; }
+  .repository-bar code { padding: 0; }
+  .banner { align-items: start; flex-direction: column; gap: 16px; }
+  .commit-columns { grid-template-columns: 1fr; }
+  select { min-width: 180px; max-width: 100%; }
+}

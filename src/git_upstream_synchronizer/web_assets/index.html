@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="sync-token" content="__REQUEST_TOKEN__">
+  <title>Git Upstream Synchronizer</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner"><span class="mark" aria-hidden="true">⑂</span>
+      <span>git / <strong>upstream synchronizer</strong></span>
+      <span class="badge">Local checkout</span>
+    </div>
+  </header>
+  <main>
+    <div class="page-heading"><div><h1>Compare &amp; sync</h1>
+      <p>Review upstream changes before updating your local fork.</p></div>
+    </div>
+    <section class="repository-bar" aria-label="Repository selection">
+      <label for="repository">Repository
+        <select id="repository" disabled><option>Loading repositories…</option></select>
+      </label>
+      <code id="branches"></code>
+      <button id="refresh" disabled>Refresh comparison</button>
+    </section>
+    <p id="message" role="status" aria-live="polite">Loading repositories…</p>
+    <section id="comparison" hidden>
+      <div id="banner" class="banner">
+        <div><h2 id="state-title"></h2><p id="state-description"></p>
+          <p id="counts" class="muted"></p></div>
+        <button id="sync" class="primary" disabled>Sync local fork</button>
+      </div>
+      <div class="refs"><span>Local <code id="local-sha"></code></span>
+        <span>Upstream <code id="upstream-sha"></code></span></div>
+      <div class="tabs" role="tablist" aria-label="Comparison views">
+        <button id="commits-tab" role="tab" aria-selected="true"
+          aria-controls="commits-panel">Commits <span id="commit-count" class="counter">0</span></button>
+        <button id="files-tab" role="tab" aria-selected="false"
+          aria-controls="files-panel">Files changed <span id="file-count" class="counter">0</span></button>
+      </div>
+      <section id="commits-panel" role="tabpanel" aria-labelledby="commits-tab">
+        <p class="section-note">Commits unique to each side, newest first.</p>
+        <div class="commit-columns">
+          <div class="panel"><h3 id="upstream-heading">Only in upstream</h3>
+            <ul id="upstream-commits" class="commits"></ul></div>
+          <div class="panel"><h3 id="local-heading">Only in local fork</h3>
+            <ul id="local-commits" class="commits"></ul></div>
+        </div>
+        <p id="commit-limit" class="section-note"></p>
+      </section>
+      <section id="files-panel" role="tabpanel" aria-labelledby="files-tab" hidden>
+        <p class="section-note">File contents compare local HEAD → fetched upstream.
+          For diverged histories, review both sides before deciding how to integrate changes.</p>
+        <div id="files"></div><p id="file-limit" class="section-note"></p>
+      </section>
+    </section>
+    <footer>Synchronization updates the configured local checkout.
+      Pushing changes to a remote fork is a separate operation.</footer>
+  </main>
+</body>
+</html>

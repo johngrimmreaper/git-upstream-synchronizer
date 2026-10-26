@@ -315,3 +315,27 @@ A hung orphan/helper can retain the lock until it is stopped;
 there is no automatic orphan reaper. Multi-host races, production authentication,
 resource soak, LFS/submodule behavior, remote pushes, and disaster recovery remain
 untested.
+
+## Local web interface
+
+The first web interface uses only the Python standard library and packaged
+HTML/CSS/JavaScript assets. Comparison fetches under the same lock and checkout
+preconditions as synchronization, without merging or modifying local files.
+
+- Full suite with the optional SDK: **85 passed**.
+- New Git/HTTP integration checks: **18 passed**, including equal, behind, ahead,
+  diverged, and unrelated histories; literal filenames and binary changes;
+  capped previews; stale comparisons; dirty checkouts; preserved Git and advisory
+  locks; repository allowlist enforcement; and rejected cross-origin requests.
+- JavaScript syntax: `node --check` passed. `git diff --check` passed.
+- A wheel built offline included all three web assets. A fresh virtual environment
+  installed that wheel without dependencies or the Camunda SDK. The installed
+  `git-upstream-web` entry point served the page and assets, compared a behind
+  branch, and completed real HTTP sync calls as `UPDATED`, `UP_TO_DATE`, and
+  `NEEDS_REVIEW`, preserving the divergent local HEAD.
+- Wheel/HTTP evidence: `/tmp/git-sync-web-acceptance-ruq2tcc_/report.json`.
+- HTTP, asset delivery, and JavaScript syntax were checked. Browser rendering and
+  interaction still require a manual pass; no browser was installed on the VM.
+
+This is a local development interface. Remote pushes, a graphical commit tree,
+production authentication, and deployment remain outside its implemented scope.

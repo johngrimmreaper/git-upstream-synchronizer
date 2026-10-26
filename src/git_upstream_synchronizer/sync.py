@@ -1,5 +1,6 @@
 """Safe local Git fast-forward synchronization; never pushes or force-updates."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 import fcntl
@@ -64,6 +65,14 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
     Repository-local Git environment overrides must be unset.
     This intentionally does not push the result to a hosting service.
     """
+    with _fetched_repository(repo, branch=branch, upstream=upstream) as snapshot:
+        path, local_sha, upstream_sha, lock_fd = snapshot
+        return _synchronize_locked(path, local_sha, upstream_sha, lock_fd)
+
+
+@contextmanager
+def _fetched_repository(repo: Path, *, branch: str, upstream: str):
+    """Hold the shared lock through validation, fetching, and snapshot use."""
     overrides = sorted(_LOCAL_GIT_ENV.intersection(os.environ))
     if overrides:
         raise SyncError("Unset repository-local Git environment variables: " + ", ".join(overrides))
@@ -88,12 +97,13 @@ def synchronize_repository(repo: Path, *, branch: str = "main", upstream: str = 
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
                 raise GitCommandError("Another synchronization is running") from error
-            return _synchronize_locked(path, branch, upstream, lock.fileno())
+            local_sha, upstream_sha = _fetch_locked(path, branch, upstream, lock.fileno())
+            yield path, local_sha, upstream_sha, lock.fileno()
     except OSError as error:
         raise GitCommandError("Unable to lock repository") from error
 
 
-def _synchronize_locked(path: Path, branch: str, upstream: str, lock_fd: int) -> SyncResult:
+def _fetch_locked(path: Path, branch: str, upstream: str, lock_fd: int) -> tuple[str, str]:
     current_branch = _git(
         path, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_exit_codes=(0, 1),
     ).stdout.strip()
@@ -115,7 +125,10 @@ def _synchronize_locked(path: Path, branch: str, upstream: str, lock_fd: int) ->
     _git(path, "fetch", "--no-tags", upstream, f"refs/heads/{branch}", lock_fd=lock_fd)
     local_sha = _git(path, "rev-parse", f"refs/heads/{branch}").stdout.strip()
     upstream_sha = _git(path, "rev-parse", "FETCH_HEAD").stdout.strip()
+    return local_sha, upstream_sha
 
+
+def _synchronize_locked(path: Path, local_sha: str, upstream_sha: str, lock_fd: int) -> SyncResult:
     if local_sha == upstream_sha:
         return SyncResult("UP_TO_DATE", local_sha, upstream_sha, local_sha)
 

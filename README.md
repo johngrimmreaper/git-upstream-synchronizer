@@ -14,6 +14,7 @@ concept and a foundation for a useful standalone tool, not a production platform
 flowchart TD
     BPMN["Camunda BPMN process"] --> Worker["Optional Python worker"]
     CLI["Standalone CLI"] --> Core["Python synchronization core"]
+    Web["Local web interface"] --> Core
     Worker --> Core
     Core --> Git["Installed Git CLI"]
     Git --> Checkout["Dedicated local checkout"]
@@ -22,8 +23,10 @@ flowchart TD
 - `sync.py` accepts a path, branch, and configured remote; returns a frozen
   `SyncResult`; and raises meaningful precondition or Git-operation exceptions.
 - `cli.py` translates command-line arguments and prints JSON.
-- `camunda_worker.py` alone handles SDK jobs, local repository configuration,
-  process-variable translation, and retries. It calls the same core function.
+- `camunda_worker.py` handles SDK jobs, process-variable translation, and retries.
+  It calls the same core function.
+- `web.py` serves the local interface; `comparison.py` inspects fetched snapshots.
+  The web and Camunda adapters share the SDK-free allowlist loader in `config.py`.
 - `scripts/demo.py` creates disposable Git fixtures and can drive either adapter.
 
 There is no plugin registry, framework, database, or asynchronous code in the core.
@@ -89,6 +92,53 @@ closes; the lock file itself can remain on disk. Do not delete that file to bypa
 an active lock. Other Git applications do not honor it: use a dedicated checkout
 and avoid manual changes while synchronization is running. Repositories and their
 Git configuration/hooks must be trusted; this tool is not a sandbox.
+
+## Local web interface
+
+The optional web interface uses Python's standard library, plain HTML/CSS, and
+JavaScript. It needs no Camunda SDK, database, frontend build, or extra packages.
+Configure dedicated local checkouts with the same JSON allowlist used by the worker:
+
+```bash
+cp config/repos.example.json config/repos.json
+vi config/repos.json
+.venv/bin/python -m git_upstream_synchronizer.web --repositories config/repos.json --port 8089
+```
+
+If `config/repos.json` already exists, edit that file instead of replacing it.
+Open <http://127.0.0.1:8089>. An installed package also provides `git-upstream-web`
+with the same arguments. Ctrl+C stops the server. The port defaults to 8089.
+For access from another computer, forward the VM's loopback port over SSH:
+
+```bash
+ssh -N -L 8089:127.0.0.1:8089 codex@codexvm
+```
+
+The repository selector shows only configured entries. Opening a repository or
+refreshing fetches upstream and shows ahead/behind counts, commits unique to each
+side, and expandable unified file diffs. Comparison holds the same advisory lock
+and applies the same checkout validation as synchronization. It updates fetch
+metadata but leaves the local branch and worktree unchanged. Dirty checkouts and
+Git locks require attention before comparison or synchronization can proceed.
+
+**Sync local fork** is enabled for a behind branch and calls the existing core.
+It revalidates and fetches again when clicked, so a stale preview cannot bypass
+safety checks. Ahead, diverged, and unrelated histories require manual review.
+Synchronization updates the local checkout; remote pushes remain outside scope.
+File patches compare local HEAD to the fetched upstream tip, rather than a merge
+base. That distinction matters when reviewing divergent histories.
+
+The first version shows at most 30 commits per side, 20 changed files, and 20,000
+characters per text patch. Full counts and truncation notices remain visible.
+Binary files show a notice; renames appear as deletions and additions. This is a
+single-user local development interface: it binds only to 127.0.0.1, validates
+Host/Origin, and requires a page token for comparison and synchronization requests.
+It has no login, persistent history, graphical commit tree, or production hosting.
+
+For disposable fixtures, run `.venv/bin/python scripts/demo.py --prepare` and use
+`--repositories` with the `repos.json` path in the printed demo directory.
+Focused HTTP and comparison checks run with
+`.venv/bin/python -m pytest -q tests/test_web.py`.
 
 ## Optional Camunda environment
 
@@ -385,5 +435,4 @@ on a filesystem that supports Linux `flock` semantics.
 
 Remote pushes, conflict resolution, bare-repository updates, submodule updates,
 LFS downloads, verification of upstream commit signatures, and multi-host execution
-are outside the implemented scope. There is no web frontend, scheduler, or approval
-workflow. Additional features should follow concrete operating requirements.
+are outside the implemented scope. There is no scheduler or approval workflow. Additional features should follow concrete operating requirements.

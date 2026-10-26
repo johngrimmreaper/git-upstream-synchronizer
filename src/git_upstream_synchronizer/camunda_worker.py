@@ -3,13 +3,13 @@
 import argparse
 import asyncio
 from dataclasses import asdict
-import json
 import logging
 from pathlib import Path
 import signal
 
 from camunda_orchestration_sdk import CamundaAsyncClient, JobFailure, SyncJobContext, WorkerConfig
 
+from .config import load_repositories
 from .sync import GitCommandError, SyncError, synchronize_repository
 
 LOG = logging.getLogger(__name__)
@@ -38,21 +38,6 @@ def handle_job(job: SyncJobContext, repositories: dict[str, dict[str, str]]) -> 
         raise JobFailure(message=str(error), retry_back_off=RETRY_BACKOFF_MS) from error
     LOG.info("job=%s status=%s current_sha=%s", job.job_key, result.status, result.current_sha)
     return asdict(result)
-
-
-def load_repositories(path: Path) -> dict[str, dict[str, str]]:
-    """Load a small local allowlist; process variables cannot select arbitrary paths."""
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or not data:
-        raise ValueError("Repository configuration must be a nonempty JSON object")
-    for name, config in data.items():
-        if not isinstance(config, dict) or set(config) - {"path", "branch", "upstream"}:
-            raise ValueError(f"Invalid configuration for {name!r}")
-        if not config.get("path") or not all(isinstance(v, str) and v for v in config.values()):
-            raise ValueError(f"Configuration for {name!r} needs a path and nonempty strings")
-        if not Path(config["path"]).is_absolute():
-            raise ValueError(f"Repository path for {name!r} must be absolute")
-    return data
 
 
 async def run_worker(repositories: dict[str, dict[str, str]]) -> None:

@@ -11,6 +11,7 @@ dependencies = []
 
 [project.scripts]
 git-upstream-sync = "git_upstream_synchronizer.cli:main"
+git-upstream-web = "git_upstream_synchronizer.web:main"
 git-upstream-worker = "git_upstream_synchronizer.camunda_worker:main"
 
 [project.optional-dependencies]
@@ -19,6 +20,9 @@ camunda = ["camunda-orchestration-sdk==9.0.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+git_upstream_synchronizer = ["web_assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
