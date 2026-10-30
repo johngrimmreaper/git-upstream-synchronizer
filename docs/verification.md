@@ -1,4 +1,125 @@
-# Verification record — 2026-10-26
+# Verification record — 2026-10-30
+
+The current application source through `c6541be` was verified on CodexVM using
+only its MCP tunnel. The earlier records below are historical. Browser verification
+and the optional Camunda web path are now implemented and tested.
+
+## Current checks
+
+Environment: Ubuntu 26.04.1, Python 3.14.4, Git 2.53.0, Java 21.0.12.1,
+c8run 8.9.26, SDK 9.0.1, pytest 9.0.2, Playwright 1.64.1, Chromium 156.0.8078.4.
+The existing native installation/data were reused. Topology reported a healthy
+leader and gateway 8.9.26. No Docker runtime was introduced.
+
+All successful commands below exited 0. Generated logs/reports/screenshots are
+excluded from source; the main command logs and round checkpoints are under
+`infra/camunda/verification-20261030/` on CodexVM.
+
+| Command/check | Fresh observed result |
+| --- | --- |
+| Baseline `python -m pytest -q` at `325fcc9` | 85 passed |
+| Final `python -m pytest -q` | 102 passed in 17.24s |
+| `pytest -q tests/test_web.py tests/test_camunda_web.py` | 33 passed |
+| `pytest -q tests/test_safety.py -k killed_sync` | 4 passed, 16 deselected |
+| `pytest -q tests/test_interrupted_checkout.py` | 5 passed |
+| `pytest -q tests/test_demo_lock.py` | 5 passed |
+| `pytest -q tests/test_git_environment.py` | 8 passed |
+| `pytest -q tests/test_demo_cleanup.py` | 5 passed |
+| Installed SDK-free wheel suite, `PYTHONPATH` unset and `-o pythonpath=` | 73 passed, 4 skipped in 15.20s |
+| Fresh installed direct wheel smoke | CLI, direct HTTP sync, packaged assets, import location, missing-SDK startup error passed |
+| Fresh installed Camunda-extra wheel smoke | Installed web/worker entry points completed a real BPMN process at `EndUpdated` |
+| Existing live `scripts/demo.py --camunda` | All business outcomes, retries, incidents and same-job operator recovery passed |
+| Existing live `scripts/demo_crash_recovery.py` | Same-job redelivery, unchanged HEAD/count after the effect, 3 retries retained |
+| `scripts/test_browser_integration.py --camunda` | 19 scenario records; no uncaught browser exceptions |
+| JavaScript `node --check`; `git diff --check` | Passed |
+| Supervisor start/stop lifecycle | Both owned children exited; Camunda remained healthy |
+
+The four SDK-free skips are the Camunda worker, web-adapter and demo-cleanup test
+modules, plus the crash-demo entry-point check. Neither ordinary suite contacts a
+live Camunda server. Wheel smoke tests ran in new virtualenvs outside the checkout
+and asserted the imported module came from `site-packages`.
+
+## Demonstrated defects and fixes
+
+Historical source from `325fcc9` was executed against new disposable fixtures
+without altering the project checkout. It captured a 4,000,153-character patch
+before returning only 20,000 characters, raised `UnicodeDecodeError` for non-UTF-8
+text, and produced malformed commit metadata when a subject contained U+0085.
+`baseline-defects.json` records these reproductions.
+
+Preview subprocess reads now retain bounded output and stop excessive patch
+output. Changed-file and commit-metadata inventories above 2 MiB fail explicitly.
+Patch previews retain at most 20,000 bytes; text is decoded with replacement for
+display, while filename bytes survive literal Git path selection. NUL-separated
+commit fields preserve Unicode line separators. Regressions also verify binary
+files, unusual filenames, rename-as-delete/add, and tip-to-tip differences for
+divergent histories. This is not a Git process RSS or whole-server memory bound.
+
+Unexpected HTTP exceptions now retain tracebacks in server logs, with generic
+browser errors. Malformed/oversized bodies, duplicate framing headers, Host/Origin,
+request tokens and allowlist scoping are checked. During live evidence review,
+completed-operation retry counts were found to retain pre-recovery values; final
+job metadata is now refreshed before completion is returned.
+
+## Browser-to-Git evidence
+
+The final extended run is `/tmp/git-sync-demo-hhslic1p/browser-report.json`.
+It includes string process/job/incident keys, business results, Git SHAs, end events
+and browser states. Screenshots include desktop, 390px mobile, expanded literal
+HTML-looking diffs, retry, incident, completion and crash recovery. The screenshots
+were inspected. Two expected HTTP503 console errors come from injected comparison
+and monitoring failures; there were no uncaught page exceptions.
+
+| Scenario | Process key | Observed evidence |
+| --- | --- | --- |
+| Browser fast-forward / repeated submission coalescing | `2251799813766653` | `UPDATED`, job `2251799813766660`, `EndUpdated`, new HEAD/files and visible completion; page reload retained tracking |
+| Repeated HTTP synchronization | `2251799813766672` | `UP_TO_DATE`, `EndUpToDate`, equal result SHAs |
+| Stale preview | `2251799813766692` | New local commit preserved; `NEEDS_REVIEW`, `EndNeedsReview` |
+| Ahead / diverged | `2251799813766711` / `2251799813766729` | Correct counts/states, disabled UI sync; HTTP backend returns `NEEDS_REVIEW` |
+| Dirty checkout | `2251799813766749` | Bytes/HEAD preserved at incident `2251799813766758`; same job `2251799813766756` recovered after explicit fixture repair |
+| Existing Git lock | `2251799813766770` | Lock bytes/HEAD preserved at incident `2251799813766779`; original job recovered after operator removal of its synthetic lock |
+| Temporary fetch failure | `2251799813766795` | Browser showed retrying with 2 retries; restored local remote; same process completed `UPDATED` |
+| Persistent fetch failure | `2251799813766823` | Zero retries, incident `2251799813766843`, unchanged HEAD, no success; restored job `2251799813766830` completed after explicit operator recovery |
+| Browser-started worker crash | `2251799813766625` | Job `2251799813766632` timed out with 3 retries after Git effect; normal replacement completed same job as `UP_TO_DATE`, `EndUpToDate`; no second HEAD/count change |
+| Monitoring transport unavailable | `2251799813766860` | Actual connection refusal reported as unavailable, never workflow failure; resumed original process and completed |
+| Camunda creation unavailable | No acknowledged key | Browser showed `CREATION_UNKNOWN`, prevented resubmission across reload; Git HEAD preserved; no direct fallback |
+
+The ordinary update moved HEAD from
+`5838e959da914bd73036a58cc13ea86358393636` to
+`52324f9e280aea00e65b9e88c14786abd244813e` and installed the expected fixture files.
+The crash receipt records the same first effect; redelivery retained that latter
+SHA and the commit count. Git dirty/lock/persistent-failure incidents were observed
+before repair; browser-harness instances then completed and its owned workers and
+HTTP servers stopped.
+
+Existing demonstration reports are `/tmp/git-sync-demo-351gfm3p/report.json`
+and `/tmp/git-sync-demo-95_lqi26/report.json`. The former intentionally retains
+persistent-fetch incident `2251799813765143` for inspection. Earlier runtime
+incidents were preserved. Fresh final wheel evidence is under
+`/tmp/git-sync-demo-ictfrakd` and `/tmp/git-sync-demo-dbsv7oan`.
+
+## Reproducibility and limits
+
+See [integration testing](integration-testing.md) for exact commands and supervised
+review-stack instructions. Early browser harness failures are retained in logs:
+a reservation/acknowledgment race, reused IDs after a failed run, a CSP-incompatible
+Playwright string predicate, and an outstanding activation request during a worker
+handoff. The final harness waits for acknowledgment, namespaces IDs, checks for
+eligible jobs, cleans up owned keys, uses locator predicates, and starts the fault
+worker before the normal worker. No production activation timeout was shortened.
+
+Camunda API-driven operator recovery was tested; clicking Operate's recovery
+controls was not. Fetch faults use missing local fixture remotes, not a real
+external outage. Chromium is the only browser engine tested. Power loss/ref-write
+crashes, lost job-completion responses, multi-host races, resource soak,
+LFS/submodule behavior and production authentication remain unverified. The local
+journal is in memory, bounded to 256 operations, and cannot reconnect after server
+restart. Creation ambiguity requires operator inspection. There is no exactly-once
+execution or transaction spanning Git and Camunda.
+
+---
+
+# Historical verification — 2026-10-26
 
 Validation covered the synchronization core, standalone CLI, optional Camunda
 worker, and executable BPMN process. Initial integration results were recorded on

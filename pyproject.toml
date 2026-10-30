@@ -16,6 +16,7 @@ git-upstream-worker = "git_upstream_synchronizer.camunda_worker:main"
 
 [project.optional-dependencies]
 dev = ["pytest==9.0.2"]
+browser = ["playwright==1.64.1"]
 camunda = ["camunda-orchestration-sdk==9.0.1"]
 
 [tool.setuptools.packages.find]
