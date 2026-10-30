@@ -54,10 +54,12 @@ def _bounded_git(path: Path, *args: str, limit: int) -> tuple[bytes, bool]:
 
 
 def _commits(path: Path, revision: str) -> list[dict[str, str]]:
-    output, _ = _bounded_git(
+    output, truncated = _bounded_git(
         path, "log", "-z", "--no-decorate", "--no-color", f"--max-count={COMMIT_LIMIT}",
         "--format=%H%x00%an%x00%aI%x00%s", revision, "--", limit=INVENTORY_LIMIT,
     )
+    if truncated:
+        raise GitCommandError("Commit metadata exceeds the 2 MiB preview limit; inspect with Git")
     fields = output.decode("utf-8", "replace").split("\0")
     return [dict(zip(("sha", "author", "date", "subject"), fields[i:i+4]))
             for i in range(0, len(fields) - 4, 4)]
