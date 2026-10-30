@@ -10,7 +10,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar-inner"><span class="mark" aria-hidden="true">⑂</span>
+    <div class="topbar-inner"><span class="mark" aria-hidden="true">↑</span>
       <span>git / <strong>upstream synchronizer</strong></span>
       <span class="badge">Local checkout</span>
     </div>
@@ -27,6 +27,11 @@
       <button id="refresh" disabled>Refresh comparison</button>
     </section>
     <p id="message" role="status" aria-live="polite">Loading repositories…</p>
+    <section id="operation" hidden aria-label="Workflow tracking">
+      <p id="operation-state" role="status" aria-live="polite"></p>
+      <p>Process <code id="process-key"></code> · <a id="operate" target="_blank" rel="noopener noreferrer">Open in Operate</a></p>
+      <button id="resume-monitoring" hidden>Resume monitoring</button>
+    </section>
     <section id="comparison" hidden>
       <div id="banner" class="banner">
         <div><h2 id="state-title"></h2><p id="state-description"></p>

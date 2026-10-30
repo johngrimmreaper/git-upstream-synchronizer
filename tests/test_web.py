@@ -77,8 +77,8 @@ def test_preview_reports_complete_counts_with_capped_details(repositories, monke
 
 
 @contextmanager
-def running_server(fork):
-    server = WebServer({"demo": {"path": str(fork)}}, port=0)
+def running_server(fork, executor=None):
+    server = WebServer({"demo": {"path": str(fork)}}, port=0, executor=executor)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
@@ -114,7 +114,7 @@ def test_http_page_assets_and_real_sync(repositories):
         assert status == 200 and server.token in html and "__REQUEST_TOKEN__" not in html
         assert request("/app.js")[0] == request("/app.css")[0] == 200
         assert request("/api/repositories")[1] == {
-            "repositories": [{"id": "demo", "branch": "main", "upstream": "upstream"}],
+            "execution": "direct", "repositories": [{"id": "demo", "branch": "main", "upstream": "upstream"}],
         }
         assert request("/api/compare", {"repository_id": "demo"})[1]["status"] == "BEHIND"
         assert not (fork / "web.txt").exists()
@@ -212,3 +212,27 @@ def test_inventory_limit_does_not_return_incorrect_counts(repositories, monkeypa
     from git_upstream_synchronizer.sync import GitCommandError
     with pytest.raises(GitCommandError, match="inventory exceeds"):
         comparison.compare_repository(fork)
+
+
+@pytest.mark.parametrize("body", [b"{", b"[]", b"null", b"\xff", b"x" * 4097])
+def test_malformed_and_oversized_bodies_are_rejected(repositories, body):
+    _, fork = repositories
+    with running_server(fork) as (server, _):
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port)
+        connection.request("POST", "/api/sync", body=body, headers={
+            "Content-Type": "application/json", "X-Sync-Token": server.token})
+        response = connection.getresponse()
+        assert response.status == 400
+        response.read()
+        connection.close()
+    assert not (fork / ".git/FETCH_HEAD").exists()
+
+
+def test_unexpected_errors_log_traceback_without_browser_details(repositories, monkeypatch, caplog):
+    _, fork = repositories
+    def broken(*args, **kwargs): raise RuntimeError("private credentials")
+    monkeypatch.setattr("git_upstream_synchronizer.web.compare_repository", broken)
+    with running_server(fork) as (_, request):
+        status, result = request("/api/compare", {"repository_id": "demo"})
+        assert status == 500 and "private credentials" not in str(result)
+    assert "private credentials" in caplog.text and "Traceback" in caplog.text

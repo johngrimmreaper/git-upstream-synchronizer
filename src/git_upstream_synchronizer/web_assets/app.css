@@ -81,3 +81,7 @@ footer { border-top: 1px solid var(--border); margin-top: 36px; padding-top: 16p
   .commit-columns { grid-template-columns: 1fr; }
   select { min-width: 180px; max-width: 100%; }
 }
+
+#operation { border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin: 12px 0; overflow-wrap: anywhere; }
+#operation button { margin-top: 10px; }
+.repository-bar label { min-width: 0; max-width: 100%; }

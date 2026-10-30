@@ -4,6 +4,9 @@ const $ = (id) => document.getElementById(id);
 const token = document.querySelector('meta[name="sync-token"]').content;
 let snapshot = null;
 let repositories = [];
+let activeOperation = null;
+let execution = "direct";
+let submitting = false;
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -18,16 +21,18 @@ function message(text, kind = "") {
 }
 
 function busy(value) {
+  value = value || Boolean(activeOperation) || submitting;
   $("repository").disabled = value || !repositories.length;
   $("refresh").disabled = value || !repositories.length;
   $("sync").disabled = value || snapshot?.status !== "BEHIND";
 }
 
-async function api(action) {
+async function api(action, extra = {}) {
   const response = await fetch("/api/" + action, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Sync-Token": token },
-    body: JSON.stringify({ repository_id: $("repository").value }),
+    body: JSON.stringify({ repository_id: $("repository").value, ...extra }),
+    signal: AbortSignal.timeout(action === "compare" || action === "sync" ? 90000 : 25000),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Request failed");
@@ -144,22 +149,90 @@ async function refreshComparison(notice = "") {
 }
 
 $("refresh").addEventListener("click", () => refreshComparison());
-$("repository").addEventListener("change", () => refreshComparison());
+$("repository").addEventListener("change", () => {
+  $("operation").hidden = true;
+  refreshComparison();
+});
+const notices = {
+  UPDATED: "UPDATED: Local checkout updated.",
+  UP_TO_DATE: "UP_TO_DATE: The local checkout is already up to date.",
+  NEEDS_REVIEW: "NEEDS_REVIEW: Repository state changed; manual review is now required.",
+};
+
+function showOperation(operation) {
+  $("operation").hidden = false;
+  $("operation-state").textContent = operation.state + ": " + operation.message;
+  message(operation.message, ["INCIDENT", "CREATION_UNKNOWN", "UNAVAILABLE"].includes(operation.state) ? "error" : "");
+  $("process-key").textContent = operation.process_instance_key || "Creation unacknowledged";
+  $("operate").hidden = !operation.operate_url;
+  if (operation.operate_url) $("operate").href = operation.operate_url;
+}
+
+async function monitor() {
+  $("resume-monitoring").hidden = true;
+  // Each session is bounded; resuming only queries, never resubmits a workflow.
+  for (let attempt = 0; attempt < 120 && activeOperation; attempt++) {
+    try {
+      const operation = await api("operation", {operation_id: activeOperation.operation_id});
+      showOperation(operation);
+      activeOperation = operation;
+      sessionStorage.setItem("git-sync-operation", JSON.stringify(operation));
+      if (operation.state === "COMPLETED") {
+        activeOperation = null;
+        sessionStorage.removeItem("git-sync-operation");
+        await refreshComparison(notices[operation.result.status]);
+        return;
+      }
+      if (operation.state === "CANCELED") {
+        activeOperation = null;
+        sessionStorage.removeItem("git-sync-operation");
+        snapshot = null;
+        message(operation.message, "error");
+        busy(false);
+        return;
+      }
+      if (["CREATION_UNKNOWN", "INCIDENT", "UNAVAILABLE"].includes(operation.state)) break;
+    } catch (error) {
+      $("operation-state").textContent = "Monitoring unavailable: " + error.message +
+        ". The workflow outcome is unknown; do not submit again.";
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  $("resume-monitoring").hidden = activeOperation?.state === "CREATION_UNKNOWN";
+  busy(false);
+}
+
+$("resume-monitoring").addEventListener("click", () => monitor());
 $("sync").addEventListener("click", async () => {
+  if (submitting || activeOperation || snapshot?.status !== "BEHIND") return;
+  submitting = true;
   busy(true);
-  message("Synchronizing the local checkout…");
+  message(execution === "camunda" ? "Starting Camunda workflow…" : "Synchronizing the local checkout…");
   try {
+    // Persist a guard before sending: even a lost HTTP response must not cause a resubmission.
+    if (execution === "camunda") {
+      activeOperation = {repository_id: $("repository").value, state: "CREATION_UNKNOWN",
+        message: "Creation response unknown. Inspect Operate before another submission."};
+      sessionStorage.setItem("git-sync-operation", JSON.stringify(activeOperation));
+    }
     const result = await api("sync");
-    const notices = {
-      UPDATED: "Local checkout updated to " + result.current_sha.slice(0, 12) + ".",
-      UP_TO_DATE: "The local checkout is already up to date.",
-      NEEDS_REVIEW: "Repository state changed; manual review is now required.",
-    };
-    await refreshComparison(notices[result.status]);
+    if (result.operation_id) {
+      activeOperation = result;
+      sessionStorage.setItem("git-sync-operation", JSON.stringify(result));
+      submitting = false;
+      showOperation(result);
+      await monitor();
+    } else {
+      await refreshComparison(notices[result.status]);
+    }
   } catch (error) {
     snapshot = null;
-    message("Synchronization stopped: " + error.message + ". Refresh after resolving the issue.", "error");
+    message("Synchronization outcome unknown or blocked: " + error.message +
+      ". Inspect the workflow and Git state before trying again.", "error");
+    if (activeOperation) showOperation(activeOperation);
   } finally {
+    submitting = false;
     busy(false);
   }
 });
@@ -189,11 +262,25 @@ async function start() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Unable to load repositories");
     repositories = data.repositories;
+    execution = data.execution;
     $("repository").replaceChildren(...repositories.map((repo) => {
       const option = element("option", repo.id);
       option.value = repo.id;
       return option;
     }));
+    const saved = sessionStorage.getItem("git-sync-operation");
+    if (saved) {
+      const operation = JSON.parse(saved);
+      if (execution === "camunda" && repositories.some((repo) => repo.id === operation.repository_id)) {
+        $("repository").value = operation.repository_id;
+        activeOperation = operation;
+        showOperation(operation);
+        busy(true);
+        if (operation.operation_id) await monitor();
+        return;
+      }
+      sessionStorage.removeItem("git-sync-operation");
+    }
     await refreshComparison();
   } catch (error) {
     message(error.message, "error");

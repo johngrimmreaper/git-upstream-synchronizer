@@ -14,7 +14,8 @@ concept and a foundation for a useful standalone tool, not a production platform
 flowchart TD
     BPMN["Camunda BPMN process"] --> Worker["Optional Python worker"]
     CLI["Standalone CLI"] --> Core["Python synchronization core"]
-    Web["Local web interface"] --> Core
+    Web["Local web interface"] -->|direct mode| Core
+    Web -->|Camunda mode| BPMN
     Worker --> Core
     Core --> Git["Installed Git CLI"]
     Git --> Checkout["Dedicated local checkout"]
@@ -121,7 +122,7 @@ and applies the same checkout validation as synchronization. It updates fetch
 metadata but leaves the local branch and worktree unchanged. Dirty checkouts and
 Git locks require attention before comparison or synchronization can proceed.
 
-**Sync local fork** is enabled for a behind branch and calls the existing core.
+**Sync local fork** is enabled for a behind branch. Direct mode (the default) calls the existing core.
 It revalidates and fetches again when clicked, so a stale preview cannot bypass
 safety checks. Ahead, diverged, and unrelated histories require manual review.
 Synchronization updates the local checkout; remote pushes remain outside scope.
@@ -129,7 +130,7 @@ File patches compare local HEAD to the fetched upstream tip, rather than a merge
 base. That distinction matters when reviewing divergent histories.
 
 The first version shows at most 30 commits per side, 20 changed files, and 20,000
-characters per text patch. Full counts and truncation notices remain visible.
+bytes per text patch. Read-only Git preview output is bounded before decoding; excess patch output is stopped. Changed-file inventories above 2 MiB are refused rather than returning incorrect counts. Commit previews retain at most 2 MiB per side. Non-UTF-8 display text uses replacement characters; original filename bytes are preserved for literal Git path selection. Full counts and truncation notices remain visible.
 Binary files show a notice; renames appear as deletions and additions. This is a
 single-user local development interface: it binds only to 127.0.0.1, validates
 Host/Origin, and requires a page token for comparison and synchronization requests.
@@ -139,6 +140,47 @@ For disposable fixtures, run `.venv/bin/python scripts/demo.py --prepare` and us
 `--repositories` with the `repos.json` path in the printed demo directory.
 Focused HTTP and comparison checks run with
 `.venv/bin/python -m pytest -q tests/test_web.py`.
+
+### Camunda-backed web execution
+
+Install `.[camunda]`, deploy `bpmn/synchronize-repository.bpmn`, and run one worker
+with the same allowlist as the web server. Then select the mode explicitly:
+
+```bash
+export CAMUNDA_REST_ADDRESS=http://127.0.0.1:8080/v2
+export CAMUNDA_AUTH_STRATEGY=NONE
+.venv/bin/git-upstream-web --repositories config/repos.json --execution camunda
+```
+
+`--process-id` defaults to `git-upstream-sync`; `--operate-url` defaults to
+`http://127.0.0.1:8080/operate`. Comparison remains local. The sync endpoint
+returns HTTP 202 with string operation/process identifiers after creation is
+acknowledged. The browser polls only that server's recorded operation and repository.
+It shows pending/running, redelivery, incidents, and actual business outcomes, with
+an Operate link. Completion requires a completed process, valid result variables,
+and the matching completed BPMN end event. Creation alone is never success.
+
+Camunda owns execution retries. There is no direct fallback or creation retry.
+An unacknowledged creation may have succeeded: tracking remains blocked and the
+operator must inspect Operate using the `web_operation_id` variable. Monitoring
+outages are reported separately from workflow failure. Resume monitoring only
+queries the existing operation. Browser polling stops after 120 requests or an
+incident/outage; use **Resume monitoring** after recovery. Request timeouts are
+bounded. One server coalesces concurrent submissions for a repository while its
+operation is active, including an unresolved incident or ambiguous creation.
+
+The in-memory journal holds at most 256 operations and is lost on server restart.
+Session storage can reconnect the same browser tab while the server remains alive;
+it cannot recover a restarted server's journal or share tracking across independent
+servers. A missing operation after restart is an unknown outcome: inspect Operate
+and Git before clearing the tab's `git-sync-operation` session-storage entry and
+reloading. Ambiguous creation reservations also require operator review and a server
+restart before new submissions. These safeguards do not provide exactly-once
+execution or atomicity between Git and Camunda.
+
+See [integration testing](docs/integration-testing.md) for reproducible browser,
+wheel, and live runtime checks. Browser tooling is a separate `browser` extra and
+is never required by the core, CLI, worker, or direct web server.
 
 ## Optional Camunda environment
 
