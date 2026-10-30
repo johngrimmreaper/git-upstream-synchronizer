@@ -179,3 +179,36 @@ def test_comparison_rejects_inherited_git_context(repositories, monkeypatch):
     with pytest.raises(SyncError, match="repository-local Git environment"):
         comparison.compare_repository(fork)
     assert not (fork / ".git" / "upstream-synchronizer.lock").exists()
+
+
+def test_non_utf8_patch_and_filename_are_previewable(repositories):
+    import os
+    seed, fork = repositories
+    name = os.fsdecode(b"latin-\xff.txt")
+    (seed / name).write_bytes(b"caf\xe9\n")
+    git(seed, "add", ".")
+    git(seed, "-c", "commit.gpgsign=false", "commit", "-m", "Non UTF8 text")
+    git(seed, "push", "origin", "main")
+    result = comparison.compare_repository(fork)
+    assert result["files"][0]["path"] == name
+    assert "+caf\ufffd" in result["files"][0]["patch"]
+
+
+def test_preview_stops_large_output_and_reaps_child(repositories):
+    seed, fork = repositories
+    commit_file(seed, "huge.txt", "x" * 4_000_000)
+    git(seed, "push", "origin", "main")
+    result = comparison.compare_repository(fork)
+    patch = result["files"][0]
+    assert patch["truncated"] and len(patch["patch"]) == comparison.PATCH_LIMIT
+    assert not (fork / "huge.txt").exists()
+
+
+def test_inventory_limit_does_not_return_incorrect_counts(repositories, monkeypatch):
+    seed, fork = repositories
+    commit_file(seed, "new.txt", "new")
+    git(seed, "push", "origin", "main")
+    monkeypatch.setattr(comparison, "INVENTORY_LIMIT", 1)
+    from git_upstream_synchronizer.sync import GitCommandError
+    with pytest.raises(GitCommandError, match="inventory exceeds"):
+        comparison.compare_repository(fork)

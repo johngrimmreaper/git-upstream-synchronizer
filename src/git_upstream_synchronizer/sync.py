@@ -42,7 +42,8 @@ def _git(
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), *args],
-            text=True, capture_output=True, check=False, timeout=30,
+            text=True, encoding="utf-8", errors="surrogateescape",
+            capture_output=True, check=False, timeout=30,
             env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
             pass_fds=() if lock_fd is None else (lock_fd,),
         )
