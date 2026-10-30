@@ -115,3 +115,55 @@ ssh -N \
 
 Open http://127.0.0.1:8089 and http://127.0.0.1:8080/operate. Local Operate credentials
 are `demo` / `demo`. Keep both listeners on loopback.
+
+## Running review stack — 2026-10-30
+
+The completed verification left this stack running on CodexVM:
+
+| Component | Current identifier/path |
+| --- | --- |
+| Supervisor | PID `127536` |
+| Compatible worker | PID `127601` |
+| Camunda-mode web server | PID `127602`, `127.0.0.1:8089` |
+| Camunda Java / Connectors | PIDs `75105` / `75104`, HTTP `127.0.0.1:8080` |
+| Allowlist | `/tmp/git-sync-review-20261030/web-repos.json` |
+| Worker / web logs | `/tmp/git-sync-review-20261030/worker.log`, `web.log` |
+| Supervisor log | `infra/camunda/verification-20261030/supervisor.log` |
+| Native runtime logs | `infra/camunda/c8run-8.9.26/log/camunda.log`, `connectors.log` |
+| Runtime configuration | `infra/application.yaml` |
+| Process metadata | `/tmp/git-sync-review-20261030/stack.json` |
+
+PIDs are this session's identifiers; consult `stack.json` and process commands
+after a restart. The `ready` fixture remains behind and can be synchronized;
+`review` is diverged and its sync button is disabled. `smoke` was synchronized
+through the browser to prove this actual supervised stack: process
+`2251799813766994`, job `2251799813767001`, `UPDATED`, `EndUpdated`, three retries.
+HEAD changed from `d0ce74bcc6297f6d7f2c839c96b75366845a7c08` to
+`cefad9e9f2805848196a8432e3ecfbd1fae625b1`, with the expected file bytes.
+
+Stop this session's supervised web/worker, preserving fixtures and Camunda:
+
+```bash
+kill -TERM 127536
+```
+
+Restart the existing mapping after inspecting pending work:
+
+```bash
+cd /home/codex/Projects/git-upstream-synchronizer
+export CAMUNDA_REST_ADDRESS=http://127.0.0.1:8080/v2
+export CAMUNDA_AUTH_STRATEGY=NONE
+.venv/bin/python scripts/serve_demo.py --directory /tmp/git-sync-review-20261030 --resume
+```
+
+Stop the supervisor before stopping Camunda:
+
+```bash
+cd /home/codex/Projects/git-upstream-synchronizer/infra/camunda/c8run-8.9.26
+./c8run stop
+```
+
+To start Camunda again, use the exact Java/loopback environment and relative
+configuration path in [the README](../README.md#optional-camunda-environment).
+Readiness requires a successful topology query, followed by deployment/execution;
+a listening port alone is insufficient. The reviewed stack passed both.

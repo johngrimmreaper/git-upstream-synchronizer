@@ -98,6 +98,13 @@ persistent-fetch incident `2251799813765143` for inspection. Earlier runtime
 incidents were preserved. Fresh final wheel evidence is under
 `/tmp/git-sync-demo-ictfrakd` and `/tmp/git-sync-demo-dbsv7oan`.
 
+The supervised review stack also passed a new browser action: process
+`2251799813766994`, job `2251799813767001`, `UPDATED`, completed `EndUpdated`,
+three retries. Its Git SHA/file checks and screenshots are recorded in
+`infra/camunda/verification-20261030/final-stack-report.json` and
+`final-stack-*.png`. See the current stack's exact paths and start/stop commands
+in [integration testing](integration-testing.md#running-review-stack--2026-10-30).
+
 ## Reproducibility and limits
 
 See [integration testing](integration-testing.md) for exact commands and supervised
